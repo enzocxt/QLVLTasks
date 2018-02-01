@@ -6,6 +6,7 @@ import codecs
 
 def parse(filename, output_dir):
     meta_dict = file_metadata()
+    skip_set = {'t_of_memory', 'me_out', 'art_hoot(time_out)'}
     with codecs.open(filename, 'r', encoding='latin1') as inf:
         context = inf.read()
         sentences = context.split('</pre>')
@@ -23,7 +24,7 @@ def parse(filename, output_dir):
                     file_id = line[startidx:endidx]
                     break
 
-            if file_id == '':
+            if file_id == '' or file_id in skip_set:
                 continue
             if cur_file_id == '':   # first time
                 cur_file_id = file_id
@@ -65,9 +66,9 @@ def file_metadata():
     return meta_dict
 
 
-def get_output_fname(file_id, output_dir, meta_dict):
+def get_output_fname_SoNaR(file_id, output_dir, meta_dict):
     ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad'}
-    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen'}
+    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws'}
 
     if file_id not in meta_dict:
         print "file id not in meta info: {}".format(file_id)
@@ -94,6 +95,79 @@ def get_output_fname(file_id, output_dir, meta_dict):
             except OSError as exc:
                 if exc.errno != errno.EEXIST:
                     raise
+
+    return filename
+
+
+def get_output_fname_LeNC(file_id, output_dir):
+    ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad'}
+    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws'}
+    meta_dict = {
+        'ad': 'algemeen_dagblad',
+        'nrc': 'nrc_handelsblad',
+        'DS': 'de_standaard',
+        'BL': 'belong_van_limburg',
+        'LN': 'het_laatste_nieuws',
+        'DT': 'de_tyd',
+        'NB': 'het_nieuwsblad',
+        'DM': 'de_morgen',
+    }
+
+    # 'NB_20051229_01.alpino.xml'
+    name = file_id.split('.')[0]
+    krant, datum, _id = name.split('_')
+    krant = meta_dict.get(krant, 'unknown')
+    jaar = datum[:4]
+
+    # 'nrc20040408.alpino.xml'
+
+    if krant in ned_set:
+        nation = 'Netherlands'
+    elif krant in bel_set:
+        nation = 'Belgium'
+    else:
+        nation = 'Other'
+    filename = "{outdir}/{nation}/{year}/{news}/{prefix}.conll".format(
+        outdir=output_dir, nation=nation, year=jaar, news=krant,
+        prefix=krant+datum)
+
+    return filename
+
+
+def get_output_fname_TwNC(file_id, output_dir):
+    ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad'}
+    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws'}
+    meta_dict = {
+        'ad': 'algemeen_dagblad',
+        'nrc': 'nrc_handelsblad',
+        'DS': 'de_standaard',
+        'BL': 'belong_van_limburg',
+        'LN': 'het_laatste_nieuws',
+        'DT': 'de_tyd',
+        'NB': 'het_nieuwsblad',
+        'DM': 'de_morgen',
+    }
+
+    # 'nrc20040408.alpino.xml'
+    name = file_id.split('.')[0]
+    idx = 0
+    for i, c in enumerate(name):
+        if c.isdigit():
+            idx = i
+            break
+    krant, datum = name[:idx], name[idx:]
+    krant = meta_dict.get(krant, 'unknown')
+    jaar = datum[:4]
+
+    if krant in ned_set:
+        nation = 'Netherlands'
+    elif krant in bel_set:
+        nation = 'Belgium'
+    else:
+        nation = 'Other'
+    filename = "{outdir}/{nation}/{year}/{news}/{prefix}.conll".format(
+        outdir=output_dir, nation=nation, year=jaar, news=krant,
+        prefix=krant+datum)
 
     return filename
 
@@ -126,21 +200,19 @@ def fname_checked(filename, tmpdir):
         return False
 
 
-def main(input_dir, output_dir, command, dtd_fname=None):
+def main_SoNaR(input_dir, output_dir, command):
     """
     :param input_dir: the input folder which includes all files you want to process
     :param output_dir: the output folder
                        it will keep the file structure of the input folder
-    :param command:
+    :param command: xQuery command
     :return:
     """
-    # get the output of command
-    # output = os.popen("ls").read()
-
+    # create output directory if it does not exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # create a tmp directory for xQuery
+    # create a tmp directory for xQuery (under output directory)
     tmpDIR_dir = '{}/tmpDIR'.format(output_dir)
     if os.path.exists(tmpDIR_dir):
         shutil.rmtree(tmpDIR_dir)
@@ -150,9 +222,6 @@ def main(input_dir, output_dir, command, dtd_fname=None):
     if os.path.exists(tmpOUT_dir):
         shutil.rmtree(tmpOUT_dir)
     os.makedirs(tmpOUT_dir)
-    if dtd_fname is not None:
-        cp_cmd = "cp {} {}".format(dtd_fname, tmpDIR_dir + '/')
-        os.system(cp_cmd)
 
     files = os.listdir(input_dir)
     i = 0
@@ -172,6 +241,7 @@ def main(input_dir, output_dir, command, dtd_fname=None):
         os.system(cmd)
         # print("done")
 
+        # split intermediate output into files
         parse(output_fname, output_dir)
 
         # remove input file in tmpDIR_dir
@@ -184,13 +254,73 @@ def main(input_dir, output_dir, command, dtd_fname=None):
             print ".",
 
 
+def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
+    """
+    :param input_dir: the input folder which includes all files you want to process
+    :param output_dir: the output folder
+                       it will keep the file structure of the input folder
+    :param command:
+    :return:
+    """
+    # create output directory if it does not exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # create a tmp directory for xQuery (under output directory)
+    tmpDIR_dir = '{}/tmpDIR'.format(output_dir)
+    if os.path.exists(tmpDIR_dir):
+        shutil.rmtree(tmpDIR_dir)
+    os.makedirs(tmpDIR_dir)
+    # create a tmp directory for intermediate output
+    tmpOUT_dir = '{}/tmp'.format(output_dir)
+    if os.path.exists(tmpOUT_dir):
+        shutil.rmtree(tmpOUT_dir)
+    os.makedirs(tmpOUT_dir)
+    # if processing LeNC corpus, dtd file is needed
+    if dtd_fname is not None:
+        cp_cmd = "cp {} {}".format(dtd_fname, tmpDIR_dir + '/')
+        os.system(cp_cmd)
+
+    files = os.listdir(input_dir)
+    i = 0
+    for f in files:
+        fname = '{}/{}'.format(input_dir, f)
+        # input_fname has the absolute system path
+        input_fname = fname_checked(fname, tmpDIR_dir)
+        if not input_fname:
+            continue
+        i += 1
+
+        # in_filename has only filename without system path
+        in_filename = input_fname.split('/')[-1]
+        # get output filename based on input filename
+        if corpus_name == 'LeNC':
+            output_fname = get_output_fname_LeNC(in_filename, output_dir)
+        elif corpus_name == 'TwNC':
+            output_fname = get_output_fname_TwNC(in_filename, output_dir)
+        else:
+            raise Exception("Incorrect corpus name: {}".format(corpus_name))
+
+        cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
+        # print("excuting system command for {} file:\n  {}".format(i, cmd))
+        os.system(cmd)
+        # print("done")
+
+        # remove input file in tmpDIR_dir
+        os.system("rm {}".format(input_fname))
+
+        if (i + 1) % 10 == 0:
+            # print("converted {} files".format(i + 1))
+            print ".",
+
+
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
 
-    corpus_name = 'TwNC'
+    corpus_name = 'LeNC'
     # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert"
     input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/data/{}".format(corpus_name)
-    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output/{}".format(corpus_name)
+    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
     dtd_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/data/{}/PublishedArticle.dtd".format(corpus_name)
     xq_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/universal_dependencies_2.0-{}.xq".format(corpus_name)
     mode = "conll"
@@ -199,6 +329,11 @@ if __name__ == '__main__':
     # use: command = "java net.sf.saxon.Query ..." directly
     command = "java -cp {} net.sf.saxon.Query "\
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
-    # main(input_dir, output_dir, command, dtd_fname=dtd_fname)
-    main(input_dir, output_dir, command)
+    # for corpus LeNC, TwNC
+    main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=dtd_fname)
+    # get_output_fname_LeNC('NB_20051229_01.alpino.xml', output_dir)
+    # get_output_fname_TwNC('nrc20051229.alpino.xml', output_dir)
+
+    # for corpus SoNaR
+    # main_SoNaR(input_dir, output_dir, command)
 
