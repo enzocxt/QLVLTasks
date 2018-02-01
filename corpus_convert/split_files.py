@@ -30,7 +30,7 @@ def parse(filename, output_dir):
                 cur_file_id = file_id
                 cur_file.append(s)
             elif cur_file_id != file_id:  # meets a new file and output the previous one
-                cur_fname = get_output_fname(cur_file_id, output_dir, meta_dict)
+                cur_fname = get_output_fname_SoNaR(cur_file_id, output_dir, meta_dict)
                 context = '\n'.join(cur_file)
                 write_file(cur_fname, context)
                 cur_file_id = file_id
@@ -100,22 +100,26 @@ def get_output_fname_SoNaR(file_id, output_dir, meta_dict):
 
 
 def get_output_fname_LeNC(file_id, output_dir):
-    ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad'}
-    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws'}
+    ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad', 'parool'}
+    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws', 'het_nieuwsblad', 'belang_van_limburg',
+               'de_tijd'}
     meta_dict = {
         'ad': 'algemeen_dagblad',
         'nrc': 'nrc_handelsblad',
+        'trouw': 'trouw',
+        'parool': 'parool',
+        'volkskrant': 'volkskrant',
         'DS': 'de_standaard',
-        'BL': 'belong_van_limburg',
+        'BL': 'belang_van_limburg',
         'LN': 'het_laatste_nieuws',
-        'DT': 'de_tyd',
+        'DT': 'de_tijd',
         'NB': 'het_nieuwsblad',
         'DM': 'de_morgen',
     }
 
     # 'NB_20051229_01.alpino.xml'
     name = file_id.split('.')[0]
-    krant, datum, _id = name.split('_')
+    krant, datum, id = name.split('_')
     krant = meta_dict.get(krant, 'unknown')
     jaar = datum[:4]
 
@@ -127,23 +131,26 @@ def get_output_fname_LeNC(file_id, output_dir):
         nation = 'Belgium'
     else:
         nation = 'Other'
-    filename = "{outdir}/{nation}/{year}/{news}/{prefix}.conll".format(
+    filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}_{id}.conll".format(
         outdir=output_dir, nation=nation, year=jaar, news=krant,
-        prefix=krant+datum)
+        krant=krant, datum=datum, id=id)
 
     return filename
 
 
 def get_output_fname_TwNC(file_id, output_dir):
-    ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad'}
-    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws'}
+    ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad', 'parool'}
+    bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws', 'het_nieuwsblad', 'belang_van_limburg', 'de_tijd'}
     meta_dict = {
         'ad': 'algemeen_dagblad',
         'nrc': 'nrc_handelsblad',
+        'trouw' : 'trouw',
+        'parool' : 'parool',
+        'volkskrant' : 'volkskrant',
         'DS': 'de_standaard',
-        'BL': 'belong_van_limburg',
+        'BL': 'belang_van_limburg',
         'LN': 'het_laatste_nieuws',
-        'DT': 'de_tyd',
+        'DT': 'de_tijd',
         'NB': 'het_nieuwsblad',
         'DM': 'de_morgen',
     }
@@ -165,9 +172,9 @@ def get_output_fname_TwNC(file_id, output_dir):
         nation = 'Belgium'
     else:
         nation = 'Other'
-    filename = "{outdir}/{nation}/{year}/{news}/{prefix}.conll".format(
+    filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}.conll".format(
         outdir=output_dir, nation=nation, year=jaar, news=krant,
-        prefix=krant+datum)
+        krant=krant, datum=datum)
 
     return filename
 
@@ -177,10 +184,19 @@ def write_file(filename, context):
         outf.write(context)
 
 
-def fname_checked(filename, tmpdir):
-    if os.path.isdir(filename) or filename.startswith('.'):
-        return False
+def check_fname(filename):
+    suffix = filename.split('.')[-1]
+    if filename.split('/')[-1].startswith('.'):
+        return -1
+    elif os.path.isdir(filename):
+        return 0
+    elif suffix in {'xml', 'gzip'}:
+        return 1
+    else:
+        return -1
 
+
+def copy_to_tmp(filename, tmpdir):
     suffix = filename.split('.')[-1]
     if suffix == 'xml':
         # copy current file into 'tmp' directory
@@ -198,6 +214,45 @@ def fname_checked(filename, tmpdir):
         return xml_fname
     else:
         return False
+
+
+def convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command):
+    files = os.listdir(input_dir)
+    i = 0
+    for f in files:
+        fname = '{}/{}'.format(input_dir, f)
+        res = check_fname(fname)
+        if res < 0:
+            continue
+        elif res == 0:
+            convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command)
+            continue
+
+        input_fname = copy_to_tmp(fname, tmpDIR_dir)
+        if not input_fname:
+            raise Exception("Processing file with suffix other than xml, gzip")
+        i += 1
+
+        tmp_in_fname = input_fname.split('/')[-1]
+        tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
+        output_fname = '{}/{}'.format(tmpOUT_dir, tmp_out_fname)
+
+        cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
+        print("excuting system command for {} file:\n  {}".format(i, cmd))
+        os.system(cmd)
+        print("done")
+
+        # split intermediate output into files
+        parse(output_fname, output_dir)
+
+        # remove input file in tmpDIR_dir
+        os.system("rm {}".format(input_fname))
+        # remove output file in tmpOUT_dir
+        os.system("rm {}".format(output_fname))
+
+        if (i + 1) % 10 == 0:
+            # print("converted {} files".format(i + 1))
+            print ".",
 
 
 def main_SoNaR(input_dir, output_dir, command):
@@ -223,35 +278,12 @@ def main_SoNaR(input_dir, output_dir, command):
         shutil.rmtree(tmpOUT_dir)
     os.makedirs(tmpOUT_dir)
 
-    files = os.listdir(input_dir)
-    i = 0
-    for f in files:
-        fname = '{}/{}'.format(input_dir, f)
-        input_fname = fname_checked(fname, tmpDIR_dir)
-        if not input_fname:
-            continue
-        i += 1
+    # recursively convert corpus files in input directory
+    convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command)
 
-        tmp_in_fname = input_fname.split('/')[-1]
-        tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
-        output_fname = '{}/{}'.format(tmpOUT_dir, tmp_out_fname)
-
-        cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
-        # print("excuting system command for {} file:\n  {}".format(i, cmd))
-        os.system(cmd)
-        # print("done")
-
-        # split intermediate output into files
-        parse(output_fname, output_dir)
-
-        # remove input file in tmpDIR_dir
-        os.system("rm {}".format(input_fname))
-        # remove output file in tmpOUT_dir
-        os.system("rm {}".format(output_fname))
-
-        if (i + 1) % 10 == 0:
-            # print("converted {} files".format(i + 1))
-            print ".",
+    # clean tmp folders
+    os.system("rm -r {}".format(tmpDIR_dir))
+    os.system("rm -r {}".format(tmpOUT_dir))
 
 
 def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
@@ -286,7 +318,7 @@ def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
     for f in files:
         fname = '{}/{}'.format(input_dir, f)
         # input_fname has the absolute system path
-        input_fname = fname_checked(fname, tmpDIR_dir)
+        input_fname = fname_checked(fname)
         if not input_fname:
             continue
         i += 1
@@ -317,7 +349,7 @@ def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
 
-    corpus_name = 'LeNC'
+    corpus_name = 'SoNaR'
     # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert"
     input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/data/{}".format(corpus_name)
     output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
@@ -330,10 +362,8 @@ if __name__ == '__main__':
     command = "java -cp {} net.sf.saxon.Query "\
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
     # for corpus LeNC, TwNC
-    main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=dtd_fname)
-    # get_output_fname_LeNC('NB_20051229_01.alpino.xml', output_dir)
-    # get_output_fname_TwNC('nrc20051229.alpino.xml', output_dir)
+    # main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=dtd_fname)
 
     # for corpus SoNaR
-    # main_SoNaR(input_dir, output_dir, command)
+    main_SoNaR(input_dir, output_dir, command)
 
