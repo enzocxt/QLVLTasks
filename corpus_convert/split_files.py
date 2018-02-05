@@ -26,6 +26,23 @@ def trace(fn):
     return wrapper
 
 
+def timeit(fn):
+    @wraps(fn)
+    def timer(*args, **kwargs):
+        ts = time.time()
+        result = fn(*args, **kwargs)
+        te = time.time()
+        f = lambda arg : type(arg)
+        print "\n************************************"
+        print "function    = {0}".format(fn.__name__)
+        print "  arguments = {0} {1}".format([f(arg) for arg in args], kwargs)
+        # print "    return    = {0}".format(result)
+        print "  time      = %.6f sec" % (te-ts)
+        print "************************************\n"
+        return result
+    return timer
+
+
 class Parser(object):
 
     @classmethod
@@ -298,6 +315,7 @@ def convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command, p
         os.system("rm {}".format(output_fname))
 
 
+@timeit
 def main_SoNaR(input_dir, output_dir, command):
     """
     :param input_dir: the input folder which includes all files you want to process
@@ -333,6 +351,7 @@ def main_SoNaR(input_dir, output_dir, command):
     os.system("rm -r {}".format(tmpOUT_dir))
 
 
+@timeit
 def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
     """
     :param input_dir: the input folder which includes all files you want to process
@@ -396,12 +415,13 @@ def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
 
+    dir_prefix = "/home/enzocxt/Projects/QLVL"
     corpus_name = 'SoNaR'
     # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert"
-    input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/data/{}".format(corpus_name)
-    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
-    dtd_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/data/{}/PublishedArticle.dtd".format(corpus_name)
-    xq_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/universal_dependencies_2.0-{}.xq".format(corpus_name)
+    input_dir = "{}/other_tasks/corpus_convert/data/{}".format(dir_prefix, corpus_name)
+    output_dir = "{}/other_tasks/corpus_convert/output".format(dir_prefix)
+    dtd_fname = "{}/other_tasks/corpus_convert/data/{}/PublishedArticle.dtd".format(dir_prefix, corpus_name)
+    xq_fname = "{}/other_tasks/corpus_convert/universal_dependencies_2.0-{}.xq".format(dir_prefix, corpus_name)
     mode = "conll"
     saxon_jar = "./saxon9he/saxon9he.jar"
     # if you can run the command without '-cp' parameter
