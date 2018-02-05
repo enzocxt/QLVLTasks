@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import codecs
+import time
 
 from tqdm import tqdm
 
@@ -27,7 +28,7 @@ def trace(fn):
 
 
 def timeit(fn):
-    @wraps(fn)
+    @functools.wraps(fn)
     def timer(*args, **kwargs):
         ts = time.time()
         result = fn(*args, **kwargs)
@@ -131,7 +132,20 @@ class MetaData(object):
 
 
 class FilenameGetter(object):
-
+    _meta_data = {
+        'ad': 'algemeen_dagblad',
+        'nrc': 'nrc_handelsblad',
+        'trouw' : 'trouw',
+        'parool' : 'parool',
+        'volkskrant' : 'volkskrant',
+        'vk': 'volkskrant',
+        'DS': 'de_standaard',
+        'BL': 'belang_van_limburg',
+        'LN': 'het_laatste_nieuws',
+        'DT': 'de_tijd',
+        'NB': 'het_nieuwsblad',
+        'DM': 'de_morgen',
+    }
     @classmethod
     def get_output_fname_SoNaR(cls, file_id, output_dir, meta_dict):
         ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad'}
@@ -170,27 +184,12 @@ class FilenameGetter(object):
         ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad', 'parool'}
         bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws', 'het_nieuwsblad', 'belang_van_limburg',
                    'de_tijd'}
-        meta_dict = {
-            'ad': 'algemeen_dagblad',
-            'nrc': 'nrc_handelsblad',
-            'trouw': 'trouw',
-            'parool': 'parool',
-            'volkskrant': 'volkskrant',
-            'DS': 'de_standaard',
-            'BL': 'belang_van_limburg',
-            'LN': 'het_laatste_nieuws',
-            'DT': 'de_tijd',
-            'NB': 'het_nieuwsblad',
-            'DM': 'de_morgen',
-        }
 
         # 'NB_20051229_01.alpino.xml'
         name = file_id.split('.')[0]
         krant, datum, id = name.split('_')
-        krant = meta_dict.get(krant, 'unknown')
+        krant = cls._meta_data.get(krant, 'unknown')
         jaar = datum[:4]
-
-        # 'nrc20040408.alpino.xml'
 
         if krant in ned_set:
             nation = 'Netherlands'
@@ -208,19 +207,6 @@ class FilenameGetter(object):
     def get_output_fname_TwNC(cls, file_id, output_dir):
         ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad', 'parool'}
         bel_set = {'de_standaard', 'dm_magazine', 'de_morgen', 'het_laatste_nieuws', 'het_nieuwsblad', 'belang_van_limburg', 'de_tijd'}
-        meta_dict = {
-            'ad': 'algemeen_dagblad',
-            'nrc': 'nrc_handelsblad',
-            'trouw' : 'trouw',
-            'parool' : 'parool',
-            'volkskrant' : 'volkskrant',
-            'DS': 'de_standaard',
-            'BL': 'belang_van_limburg',
-            'LN': 'het_laatste_nieuws',
-            'DT': 'de_tijd',
-            'NB': 'het_nieuwsblad',
-            'DM': 'de_morgen',
-        }
 
         # 'nrc20040408.alpino.xml'
         name = file_id.split('.')[0]
@@ -230,7 +216,7 @@ class FilenameGetter(object):
                 idx = i
                 break
         krant, datum = name[:idx], name[idx:]
-        krant = meta_dict.get(krant, 'unknown')
+        krant = cls._meta_data.get(krant, 'unknown')
         jaar = datum[:4]
 
         if krant in ned_set:
@@ -283,40 +269,92 @@ def copy_to_tmp(filename, tmpdir):
         return False
 
 
-def convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command, pg_leave=True):
-    depth = len(traceback.extract_stack()) - 2
-    indent = '  ' * depth
-    files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
-    for f in files:
-        fname = '{}/{}'.format(input_dir, f)
-        res = check_fname(fname)
-        if res < 0:
-            continue
-        elif res == 0:
-            convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command, pg_leave=False)
-            continue
+class Converter(object):
+    def __init__(self, corpus_name=None):
+        self.corpus_name = corpus_name
 
-        input_fname = copy_to_tmp(fname, tmpDIR_dir)
-        tmp_in_fname = input_fname.split('/')[-1]
-        tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
-        output_fname = '{}/{}'.format(tmpOUT_dir, tmp_out_fname)
+    def convert(self, *args, **kwargs):
+        pass
 
-        cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
-        # print("excuting system command for {} file:\n  {}".format(i, cmd))
-        os.system(cmd)
-        # print("done")
 
-        # split intermediate output into files
-        Parser.parse(output_fname, output_dir, meta_dict)
+class SoNaRConverter(Converter):
+    def __init__(self, corpus_name=None):
+        super(SoNaRConverter, self).__init__(corpus_name=corpus_name)
 
-        # remove input file in tmpDIR_dir
-        os.system("rm {}".format(input_fname))
-        # remove output file in tmpOUT_dir
-        os.system("rm {}".format(output_fname))
+    @classmethod
+    def convert(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command, pg_leave=True):
+        depth = len(traceback.extract_stack()) - 3
+        indent = '  ' * depth
+        files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
+
+        for f in files:
+            fname = '{}/{}'.format(input_dir, f)
+            res = check_fname(fname)
+            if res < 0:
+                continue
+            elif res == 0:  # it is a directory, recursively run convert()
+                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command, pg_leave=False)
+                continue
+
+            input_fname = copy_to_tmp(fname, tmpDIR_dir)
+            tmp_in_fname = input_fname.split('/')[-1]
+            tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
+            output_fname = '{}/{}'.format(tmpOUT_dir, tmp_out_fname)
+
+            # run xQuery command
+            cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
+            os.system(cmd)
+
+            # split intermediate output into files
+            Parser.parse(output_fname, output_dir, meta_dict)
+
+            # remove input file in tmpDIR_dir
+            os.system("rm {}".format(input_fname))
+            # remove output file in tmpOUT_dir
+            os.system("rm {}".format(output_fname))
+
+
+class LeNCConverter(Converter):
+    def __init__(self, corpus_name=None):
+        super(LeNCConverter, self).__init__(corpus_name=corpus_name)
+
+
+class TwNCConverter(Converter):
+    def __init__(self, corpus_name=None):
+        super(TwNCConverter, self).__init__(corpus_name=corpus_name)
+
+    @classmethod
+    def convert(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command, pg_leave=True):
+        depth = len(traceback.extract_stack()) - 3
+        indent = '  ' * depth
+        files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
+
+        for f in files:
+            fname = '{}/{}'.format(input_dir, f)
+            res = check_fname(fname)
+            if res < 0:
+                continue
+            elif res == 0:  # it is a directory, recursively run convert()
+                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command, pg_leave=False)
+                continue
+
+            # in_filename has only filename without system path
+            input_fname = copy_to_tmp(fname, tmpDIR_dir)
+            tmp_in_fname = input_fname.split('/')[-1]
+            output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
+
+            # run xQuery command
+            cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
+            os.system(cmd)
+
+            # remove input file in tmpDIR_dir
+            os.system("rm {}".format(input_fname))
+            # remove output file in tmpOUT_dir
+            os.system("rm {}".format(output_fname))
 
 
 @timeit
-def main_SoNaR(input_dir, output_dir, command):
+def process_SoNaR(input_dir, output_dir, command):
     """
     :param input_dir: the input folder which includes all files you want to process
     :param output_dir: the output folder
@@ -344,7 +382,7 @@ def main_SoNaR(input_dir, output_dir, command):
     meta_dict = md.read_metadata()
 
     # recursively convert corpus files in input directory
-    convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command)
+    SoNaRConverter.convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command)
 
     # clean tmp folders
     os.system("rm -r {}".format(tmpDIR_dir))
@@ -352,7 +390,7 @@ def main_SoNaR(input_dir, output_dir, command):
 
 
 @timeit
-def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
+def process_LeNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
     """
     :param input_dir: the input folder which includes all files you want to process
     :param output_dir: the output folder
@@ -412,11 +450,70 @@ def main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
             print ".",
 
 
-if __name__ == '__main__':
-    output_filename = "{newspaper_name}_{date}.conllu"
+@timeit
+def process_TwNC(input_dir, output_dir, command):
+    """
+    :param input_dir: the input folder which includes all files you want to process
+    :param output_dir: the output folder
+                       it will keep the file structure of the input folder
+    :param command:
+    :return:
+    """
+    # create output directory if it does not exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
+    # create a tmp directory for xQuery (under output directory)
+    tmpDIR_dir = '{}/tmpDIR'.format(output_dir)
+    if os.path.exists(tmpDIR_dir):
+        shutil.rmtree(tmpDIR_dir)
+    os.makedirs(tmpDIR_dir)
+    # create a tmp directory for intermediate output
+    tmpOUT_dir = '{}/tmp'.format(output_dir)
+    if os.path.exists(tmpOUT_dir):
+        shutil.rmtree(tmpOUT_dir)
+    os.makedirs(tmpOUT_dir)
+
+    # recursively convert corpus files in input directory
+    TwNCConverter.convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command)
+
+    # clean tmp folders
+    os.system("rm -r {}".format(tmpDIR_dir))
+    os.system("rm -r {}".format(tmpOUT_dir))
+
+
+def main_SoNaR():
     dir_prefix = "/home/enzocxt/Projects/QLVL"
-    corpus_name = 'SoNaR'
+    input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/SoNaR_ccl"
+    output_dir = "{}/other_tasks/corpus_convert/output".format(dir_prefix)
+    xq_fname = "{}/other_tasks/corpus_convert/universal_dependencies_2.0-SoNaR.xq".format(dir_prefix)
+    mode = "conll"
+    saxon_jar = "./saxon9he/saxon9he.jar"
+    # if you can run the command without '-cp' parameter
+    # use: command = "java net.sf.saxon.Query ..." directly
+    command = "java -cp {} net.sf.saxon.Query " \
+              "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
+
+    process_SoNaR(input_dir, output_dir, command)
+
+
+def main_TwNC():
+    dir_prefix = "/home/enzocxt/Projects/QLVL"
+    input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
+    output_dir = "{}/other_tasks/corpus_convert/output".format(dir_prefix)
+    xq_fname = "{}/other_tasks/corpus_convert/universal_dependencies_2.0-TwNC.xq".format(dir_prefix)
+    mode = "conll"
+    saxon_jar = "./saxon9he/saxon9he.jar"
+
+    # if you can run the command without '-cp' parameter
+    # use: command = "java net.sf.saxon.Query ..." directly
+    command = "java -cp {} net.sf.saxon.Query " \
+              "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
+
+    process_TwNC(input_dir, output_dir, command)
+
+
+def main_LeNC():
     # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert"
     input_dir = "{}/other_tasks/corpus_convert/data/{}".format(dir_prefix, corpus_name)
     output_dir = "{}/other_tasks/corpus_convert/output".format(dir_prefix)
@@ -426,11 +523,12 @@ if __name__ == '__main__':
     saxon_jar = "./saxon9he/saxon9he.jar"
     # if you can run the command without '-cp' parameter
     # use: command = "java net.sf.saxon.Query ..." directly
-    command = "java -cp {} net.sf.saxon.Query "\
+    command = "java -cp {} net.sf.saxon.Query " \
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
-    # for corpus LeNC, TwNC
-    # main_LeNCTwNC(corpus_name, input_dir, output_dir, command, dtd_fname=dtd_fname)
 
-    # for corpus SoNaR
-    main_SoNaR(input_dir, output_dir, command)
+    process_LeNC(corpus_name, input_dir, output_dir, command, dtd_fname=dtd_fname)
 
+
+if __name__ == '__main__':
+    output_filename = "{newspaper_name}_{date}.conllu"
+    main_SoNaR()
