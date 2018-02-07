@@ -10,6 +10,8 @@ import logging
 import functools
 import traceback
 
+import multiprocessing as mp
+
 try:
     import xml.etree.cElementTree as ET
 except ImportError:
@@ -424,6 +426,58 @@ class TwNCConverter(Converter):
             # as we don't have tmp output file for TwNC corpus
             # we do not need to remove output file in tmpOUT_dir
 
+    @classmethod
+    def convert_multi(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command='', meta_dict=None, pg_leave=True):
+        depth = len(traceback.extract_stack()) - 3
+        indent = '  ' * depth
+        files = os.listdir(input_dir)
+
+        dirs, files = file_filter(input_dir, files)
+
+        # call multiprocessing function for files
+        num_cores = mp.cpu_count() - 2
+        num_files = len(files)
+        data_group = [[] for _ in range(num_cores)]
+        for i in range(num_files):
+            idx = i % num_cores
+            data_group[idx].append(files[i])
+
+        pool = mp.Pool(processes=num_cores)
+        for i in range(num_cores):
+            job = pool.apply_async(func, args=(data_group[i],))
+        pool.close()
+        pool.join()
+
+        # recursively call self for dirs
+        for d in dirs:
+            abs_d = '{}/{}'.format(input_dir, d)
+            cls.convert(abs_d, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict, pg_leave=False)
+
+        files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
+
+        for f in files:
+            fname = '{}/{}'.format(input_dir, f)
+            res = check_fname(fname)
+            if res < 0:
+                continue
+            elif res == 0:  # it is a directory, recursively run convert()
+                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, pg_leave=False)
+                continue
+
+            # in_filename has only filename without system path
+            input_fname = copy_to_tmp(fname, tmpDIR_dir)
+            tmp_in_fname = input_fname.split('/')[-1]
+            output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
+
+            # run xQuery command
+            cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
+            os.system(cmd)
+
+            # remove input file in tmpDIR_dir
+            os.system("rm {}".format(input_fname))
+            # as we don't have tmp output file for TwNC corpus
+            # we do not need to remove output file in tmpOUT_dir
+
 
 @timeit
 def process(corpus_name, input_dir, output_dir, command='', dtd_fname=None):
@@ -476,6 +530,11 @@ def process(corpus_name, input_dir, output_dir, command='', dtd_fname=None):
     os.system("rm -r {}".format(tmpOUT_dir))
 
 
+def process_multi():
+    num_cores = mp.cpu_count() - 2
+    print num_cores
+
+
 def main_SoNaR():
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/SoNaR_ccl"
     output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
@@ -519,6 +578,30 @@ def main_LeNC():
     process('LeNC', input_dir, output_dir, command, dtd_fname=dtd_fname)
 
 
+def file_filter(path, files):
+    res_dirs, res_files = [], []
+    for fname in files:
+        print fname
+        suffix = fname.split('.')[-1]
+        if fname.startswith('.'):
+            continue
+        elif os.path.isdir('{}/{}'.format(path,fname)):
+            res_dirs.append(fname)
+        elif suffix in {'xml', 'gzip'}:
+            res_files.append(fname)
+    return res_dirs, res_files
+
+
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
-    main_SoNaR()
+    # main_SoNaR()
+    # process_multi()
+    input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
+    # files = os.listdir(input_dir)
+    # dirs, files = file_filter(input_dir, files)
+    group = [[] for _ in range(3)]
+    for i in range(10):
+        #if group[i] is None:
+        #    group[i] = []
+        group[i%len(group)].append(i)
+    print group
