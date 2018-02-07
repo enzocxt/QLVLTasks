@@ -10,6 +10,11 @@ import logging
 import functools
 import traceback
 
+try:
+    import xml.etree.cElementTree as ET
+except ImportError:
+    import xml.etree.ElementTree as ET
+
 
 def trace(fn):
     @functools.wraps(fn)
@@ -44,6 +49,37 @@ def timeit(fn):
     return timer
 
 
+class Sentence(object):
+    def __init__(self, xml_text):
+        root = ET.fromstring(xml_text)
+        sentence_tag = 'sentence'
+        sentence_item = self.find_rec(root, sentence_tag)
+        sentence = sentence_item.tail.strip()
+        # list of items
+        self.items = self.parse_sentence(sentence)
+
+    @classmethod
+    def find(cls, node, element):
+        item = cls.find_rec(node, element)
+        return item
+
+    @classmethod
+    def find_rec(cls, node, element):
+        res = node.find(element)
+        if res is None:
+            for item in node:
+                res = Sentence.find_rec(item, element)
+        return res
+
+    def parse_sentence(self, sentence):
+        # check every line in sentence
+        # if line does not start with a digit number (current lemma id)
+        # it should be the last line with '!'
+        lines = sentence.split('\n')
+        lines = filter(lambda x: x[0].isdigit(), map(lambda x: x.strip(), lines))
+        return lines
+
+
 class Parser(object):
 
     @classmethod
@@ -58,6 +94,12 @@ class Parser(object):
             cur_file = []
             for s in sentences:
                 file_id = ''
+                '''
+                root = ET.fromstring(s.encode('latin1'))
+                item = Sentence.find(root, 'file-id')
+                if item is not None and item.text is not None:
+                    file_id = item.text
+                '''
                 for line in s.split('\n'):
                     if line.strip().startswith('<file-id>'):
                         first = '<file-id>'
@@ -135,9 +177,9 @@ class FilenameGetter(object):
     _meta_data = {
         'ad': 'algemeen_dagblad',
         'nrc': 'nrc_handelsblad',
-        'trouw' : 'trouw',
-        'parool' : 'parool',
-        'volkskrant' : 'volkskrant',
+        'trouw': 'trouw',
+        'parool': 'parool',
+        'volkskrant': 'volkskrant',
         'vk': 'volkskrant',
         'DS': 'de_standaard',
         'BL': 'belang_van_limburg',
@@ -282,7 +324,7 @@ class SoNaRConverter(Converter):
         super(SoNaRConverter, self).__init__(corpus_name=corpus_name)
 
     @classmethod
-    def convert(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command, pg_leave=True):
+    def convert(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command='', meta_dict=None, pg_leave=True):
         depth = len(traceback.extract_stack()) - 3
         indent = '  ' * depth
         files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
@@ -293,7 +335,7 @@ class SoNaRConverter(Converter):
             if res < 0:
                 continue
             elif res == 0:  # it is a directory, recursively run convert()
-                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command, pg_leave=False)
+                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict, pg_leave=False)
                 continue
 
             input_fname = copy_to_tmp(fname, tmpDIR_dir)
@@ -303,6 +345,7 @@ class SoNaRConverter(Converter):
 
             # run xQuery command
             cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
+            # print cmd
             os.system(cmd)
 
             # split intermediate output into files
@@ -318,13 +361,8 @@ class LeNCConverter(Converter):
     def __init__(self, corpus_name=None):
         super(LeNCConverter, self).__init__(corpus_name=corpus_name)
 
-
-class TwNCConverter(Converter):
-    def __init__(self, corpus_name=None):
-        super(TwNCConverter, self).__init__(corpus_name=corpus_name)
-
     @classmethod
-    def convert(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command, pg_leave=True):
+    def convert(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command='', meta_dict=None, pg_leave=True):
         depth = len(traceback.extract_stack()) - 3
         indent = '  ' * depth
         files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
@@ -335,7 +373,41 @@ class TwNCConverter(Converter):
             if res < 0:
                 continue
             elif res == 0:  # it is a directory, recursively run convert()
-                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command, pg_leave=False)
+                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=None, pg_leave=False)
+                continue
+
+            # in_filename has only filename without system path
+            input_fname = copy_to_tmp(fname, tmpDIR_dir)
+            tmp_in_fname = input_fname.split('/')[-1]
+            output_fname = FilenameGetter.get_output_fname_LeNC(tmp_in_fname, output_dir)
+
+            # run xQuery command
+            cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
+            os.system(cmd)
+
+            # remove input file in tmpDIR_dir
+            os.system("rm {}".format(input_fname))
+            # as we don't have tmp output file for TwNC corpus
+            # we do not need to remove output file in tmpOUT_dir
+
+
+class TwNCConverter(Converter):
+    def __init__(self, corpus_name=None):
+        super(TwNCConverter, self).__init__(corpus_name=corpus_name)
+
+    @classmethod
+    def convert(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command='', meta_dict=None, pg_leave=True):
+        depth = len(traceback.extract_stack()) - 3
+        indent = '  ' * depth
+        files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
+
+        for f in files:
+            fname = '{}/{}'.format(input_dir, f)
+            res = check_fname(fname)
+            if res < 0:
+                continue
+            elif res == 0:  # it is a directory, recursively run convert()
+                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, pg_leave=False)
                 continue
 
             # in_filename has only filename without system path
@@ -349,12 +421,12 @@ class TwNCConverter(Converter):
 
             # remove input file in tmpDIR_dir
             os.system("rm {}".format(input_fname))
-            # remove output file in tmpOUT_dir
-            os.system("rm {}".format(output_fname))
+            # as we don't have tmp output file for TwNC corpus
+            # we do not need to remove output file in tmpOUT_dir
 
 
 @timeit
-def process_SoNaR(input_dir, output_dir, command):
+def process(corpus_name, input_dir, output_dir, command='', dtd_fname=None):
     """
     :param input_dir: the input folder which includes all files you want to process
     :param output_dir: the output folder
@@ -376,106 +448,28 @@ def process_SoNaR(input_dir, output_dir, command):
     if os.path.exists(tmpOUT_dir):
         shutil.rmtree(tmpOUT_dir)
     os.makedirs(tmpOUT_dir)
-
-    # read meta data
-    md = MetaData()
-    meta_dict = md.read_metadata()
-
-    # recursively convert corpus files in input directory
-    SoNaRConverter.convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, meta_dict, command)
-
-    # clean tmp folders
-    os.system("rm -r {}".format(tmpDIR_dir))
-    os.system("rm -r {}".format(tmpOUT_dir))
-
-
-@timeit
-def process_LeNC(corpus_name, input_dir, output_dir, command, dtd_fname=None):
-    """
-    :param input_dir: the input folder which includes all files you want to process
-    :param output_dir: the output folder
-                       it will keep the file structure of the input folder
-    :param command:
-    :return:
-    """
-    # create output directory if it does not exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # create a tmp directory for xQuery (under output directory)
-    tmpDIR_dir = '{}/tmpDIR'.format(output_dir)
-    if os.path.exists(tmpDIR_dir):
-        shutil.rmtree(tmpDIR_dir)
-    os.makedirs(tmpDIR_dir)
-    # create a tmp directory for intermediate output
-    tmpOUT_dir = '{}/tmp'.format(output_dir)
-    if os.path.exists(tmpOUT_dir):
-        shutil.rmtree(tmpOUT_dir)
-    os.makedirs(tmpOUT_dir)
     # if processing LeNC corpus, dtd file is needed
-    if dtd_fname is not None:
-        cp_cmd = "cp {} {}".format(dtd_fname, tmpDIR_dir + '/')
-        os.system(cp_cmd)
-
-    files = os.listdir(input_dir)
-    i = 0
-    for f in files:
-        fname = '{}/{}'.format(input_dir, f)
-        # input_fname has the absolute system path
-        input_fname = fname_checked(fname)
-        if not input_fname:
-            continue
-        i += 1
-
-        # in_filename has only filename without system path
-        in_filename = input_fname.split('/')[-1]
-        # get output filename based on input filename
-        if corpus_name == 'LeNC':
-            output_fname = FilenameGetter.get_output_fname_LeNC(in_filename, output_dir)
-        elif corpus_name == 'TwNC':
-            output_fname = FilenameGetter.get_output_fname_TwNC(in_filename, output_dir)
+    if corpus_name == 'LeNC':
+        if dtd_fname is None:
+            raise AttributeError('Must provide dtd file!')
         else:
-            raise Exception("Incorrect corpus name: {}".format(corpus_name))
+            cp_cmd = "cp {} {}".format(dtd_fname, tmpDIR_dir + '/')
+            os.system(cp_cmd)
 
-        cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
-        # print("excuting system command for {} file:\n  {}".format(i, cmd))
-        os.system(cmd)
-        # print("done")
+    mapper = {'SoNaR': SoNaRConverter,
+              'LeNC': LeNCConverter,
+              'TwNC': TwNCConverter,}
 
-        # remove input file in tmpDIR_dir
-        os.system("rm {}".format(input_fname))
-
-        if (i + 1) % 10 == 0:
-            # print("converted {} files".format(i + 1))
-            print ".",
-
-
-@timeit
-def process_TwNC(input_dir, output_dir, command):
-    """
-    :param input_dir: the input folder which includes all files you want to process
-    :param output_dir: the output folder
-                       it will keep the file structure of the input folder
-    :param command:
-    :return:
-    """
-    # create output directory if it does not exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # create a tmp directory for xQuery (under output directory)
-    tmpDIR_dir = '{}/tmpDIR'.format(output_dir)
-    if os.path.exists(tmpDIR_dir):
-        shutil.rmtree(tmpDIR_dir)
-    os.makedirs(tmpDIR_dir)
-    # create a tmp directory for intermediate output
-    tmpOUT_dir = '{}/tmp'.format(output_dir)
-    if os.path.exists(tmpOUT_dir):
-        shutil.rmtree(tmpOUT_dir)
-    os.makedirs(tmpOUT_dir)
+    # read meta data for corpus SoNaR
+    meta_dict = None
+    if corpus_name == 'SoNaR':
+        md = MetaData()
+        meta_dict = md.read_metadata()
 
     # recursively convert corpus files in input directory
-    TwNCConverter.convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command)
+    assert command != ''
+    converter = mapper[corpus_name]
+    converter.convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict)
 
     # clean tmp folders
     os.system("rm -r {}".format(tmpDIR_dir))
@@ -483,25 +477,23 @@ def process_TwNC(input_dir, output_dir, command):
 
 
 def main_SoNaR():
-    dir_prefix = "/home/enzocxt/Projects/QLVL"
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/SoNaR_ccl"
-    output_dir = "{}/other_tasks/corpus_convert/output".format(dir_prefix)
-    xq_fname = "{}/other_tasks/corpus_convert/universal_dependencies_2.0-SoNaR.xq".format(dir_prefix)
+    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
+    xq_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/universal_dependencies_2.0-SoNaR.xq"
     mode = "conll"
     saxon_jar = "./saxon9he/saxon9he.jar"
+
     # if you can run the command without '-cp' parameter
     # use: command = "java net.sf.saxon.Query ..." directly
     command = "java -cp {} net.sf.saxon.Query " \
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
-
-    process_SoNaR(input_dir, output_dir, command)
+    process('SoNaR', input_dir, output_dir, command=command)
 
 
 def main_TwNC():
-    dir_prefix = "/home/enzocxt/Projects/QLVL"
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
-    output_dir = "{}/other_tasks/corpus_convert/output".format(dir_prefix)
-    xq_fname = "{}/other_tasks/corpus_convert/universal_dependencies_2.0-TwNC.xq".format(dir_prefix)
+    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
+    xq_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/universal_dependencies_2.0-TwNC.xq"
     mode = "conll"
     saxon_jar = "./saxon9he/saxon9he.jar"
 
@@ -509,24 +501,22 @@ def main_TwNC():
     # use: command = "java net.sf.saxon.Query ..." directly
     command = "java -cp {} net.sf.saxon.Query " \
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
-
-    process_TwNC(input_dir, output_dir, command)
+    process('TwNC', input_dir, output_dir, command=command)
 
 
 def main_LeNC():
-    # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert"
-    input_dir = "{}/other_tasks/corpus_convert/data/{}".format(dir_prefix, corpus_name)
-    output_dir = "{}/other_tasks/corpus_convert/output".format(dir_prefix)
-    dtd_fname = "{}/other_tasks/corpus_convert/data/{}/PublishedArticle.dtd".format(dir_prefix, corpus_name)
-    xq_fname = "{}/other_tasks/corpus_convert/universal_dependencies_2.0-{}.xq".format(dir_prefix, corpus_name)
+    input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/LeNC-alpino"
+    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
+    dtd_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/data/LeNC/PublishedArticle.dtd"
+    xq_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/universal_dependencies_2.0-LeNC-final.xq"
     mode = "conll"
-    saxon_jar = "./saxon9he/saxon9he.jar"
+    saxon_jar = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/saxon9he/saxon9he.jar"
+
     # if you can run the command without '-cp' parameter
     # use: command = "java net.sf.saxon.Query ..." directly
     command = "java -cp {} net.sf.saxon.Query " \
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
-
-    process_LeNC(corpus_name, input_dir, output_dir, command, dtd_fname=dtd_fname)
+    process('LeNC', input_dir, output_dir, command, dtd_fname=dtd_fname)
 
 
 if __name__ == '__main__':

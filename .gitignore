@@ -3,4 +3,5 @@ corpus_convert/output
 corpus_convert/saxon*
 corpus_convert/Saxon*
 corpus_convert/*.txt
+corpus_convert/log.txt
 .idea
