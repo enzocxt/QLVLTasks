@@ -51,6 +51,20 @@ def timeit(fn):
     return timer
 
 
+def list_dir_tree(rootpath):
+    for root, dirs, files in os.walk(rootpath):
+        level = root.replace(rootpath, '').count(os.sep)
+        indent = ' ' * 4 * (level)
+        subindent = ' ' * 2 * (level + 1)
+        num_files = len(files)
+        file_info = "{} files".format(num_files)
+        dir_info = "{}{}/ : {}".format(indent, os.path.basename(root), file_info)
+        print dir_info
+        # print "{}{}/".format(indent, os.path.basename(root))
+        # if num_files > 0:
+        #    print "{}{} files".format(subindent, num_files)
+
+
 class Sentence(object):
     def __init__(self, xml_text):
         root = ET.fromstring(xml_text)
@@ -317,7 +331,12 @@ class Converter(object):
     def __init__(self, corpus_name=None):
         self.corpus_name = corpus_name
 
+    @classmethod
     def convert(self, *args, **kwargs):
+        pass
+
+    @classmethod
+    def convert_multi(cls, *args, **kwargs):
         pass
 
 
@@ -428,55 +447,62 @@ class TwNCConverter(Converter):
 
     @classmethod
     def convert_multi(cls, input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command='', meta_dict=None, pg_leave=True):
-        depth = len(traceback.extract_stack()) - 3
-        indent = '  ' * depth
+        # depth = len(traceback.extract_stack()) - 3
+        # indent = '  ' * depth
         files = os.listdir(input_dir)
-
         dirs, files = file_filter(input_dir, files)
 
         # call multiprocessing function for files
-        num_cores = mp.cpu_count() - 2
-        num_files = len(files)
-        data_group = [[] for _ in range(num_cores)]
-        for i in range(num_files):
-            idx = i % num_cores
-            data_group[idx].append(files[i])
-
-        pool = mp.Pool(processes=num_cores)
-        for i in range(num_cores):
-            job = pool.apply_async(func, args=(data_group[i],))
-        pool.close()
-        pool.join()
+        if len(files) > 0:
+            call_multi(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, files, command=command)
 
         # recursively call self for dirs
+        dirs = tqdm(sorted(dirs), unit='dir', desc='{}'.format(input_dir.split('/')[-1]), leave=pg_leave)
         for d in dirs:
-            abs_d = '{}/{}'.format(input_dir, d)
-            cls.convert(abs_d, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict, pg_leave=False)
+            abs_dir = '{}/{}'.format(input_dir, d)
+            cls.convert_multi(abs_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict, pg_leave=pg_leave)
 
-        files = tqdm(os.listdir(input_dir), unit='file', desc='{}corpus'.format(indent), leave=pg_leave)
 
-        for f in files:
-            fname = '{}/{}'.format(input_dir, f)
-            res = check_fname(fname)
-            if res < 0:
-                continue
-            elif res == 0:  # it is a directory, recursively run convert()
-                cls.convert(fname, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, pg_leave=False)
-                continue
+def call_multi(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, files, command=''):
+    num_cores = mp.cpu_count() - 1
+    num_files = len(files)
+    data_group = [[] for _ in range(num_cores)]
+    for i in range(num_files):
+        idx = i % num_cores
+        abs_fname = '{}/{}'.format(input_dir, files[i])
+        data_group[idx].append(abs_fname)
 
-            # in_filename has only filename without system path
-            input_fname = copy_to_tmp(fname, tmpDIR_dir)
-            tmp_in_fname = input_fname.split('/')[-1]
-            output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
+    pool = mp.Pool(processes=num_cores)
+    for i in range(num_cores):
+        args = (data_group[i], tmpDIR_dir, output_dir, command,)
+        pool.apply_async(xq_multi, args=args)
+    pool.close()
+    pool.join()
 
-            # run xQuery command
-            cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir, output_fname)
-            os.system(cmd)
 
-            # remove input file in tmpDIR_dir
-            os.system("rm {}".format(input_fname))
-            # as we don't have tmp output file for TwNC corpus
-            # we do not need to remove output file in tmpOUT_dir
+def xq_multi(fnames, tmpDIR_dir, output_dir, command):
+    pid = os.getpid()
+    tmpDIR_dir_proc = '{}_{}'.format(tmpDIR_dir, pid)
+    if not os.path.exists(tmpDIR_dir_proc):
+        os.makedirs(tmpDIR_dir_proc)
+    fnames = tqdm(fnames, unit='file', desc='proc({})'.format(pid))
+    for fname in fnames:
+        input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
+        tmp_in_fname = input_fname.split('/')[-1]
+        output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
+        # print "proc ({}): {}".format(os.getpid(), output_fname)
+
+        # run xQuery command
+        cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir_proc, output_fname)
+        os.system(cmd)
+        # res = os.popen(cmd)
+
+        # remove input file in tmpDIR_dir
+        os.system("rm {}".format(input_fname))
+        # as we don't have tmp output file for TwNC corpus
+        # we do not need to remove output file in tmpOUT_dir
+    # remove input tmp directory
+    os.system("rm -r {}".format(tmpDIR_dir_proc))
 
 
 @timeit
@@ -510,6 +536,8 @@ def process(corpus_name, input_dir, output_dir, command='', dtd_fname=None):
             cp_cmd = "cp {} {}".format(dtd_fname, tmpDIR_dir + '/')
             os.system(cp_cmd)
 
+    # show input directory structure
+
     mapper = {'SoNaR': SoNaRConverter,
               'LeNC': LeNCConverter,
               'TwNC': TwNCConverter,}
@@ -523,7 +551,8 @@ def process(corpus_name, input_dir, output_dir, command='', dtd_fname=None):
     # recursively convert corpus files in input directory
     assert command != ''
     converter = mapper[corpus_name]
-    converter.convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict)
+    # converter.convert(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict)
+    converter.convert_multi(input_dir, tmpDIR_dir, output_dir, tmpOUT_dir, command=command, meta_dict=meta_dict)
 
     # clean tmp folders
     os.system("rm -r {}".format(tmpDIR_dir))
@@ -556,6 +585,10 @@ def main_TwNC():
     mode = "conll"
     saxon_jar = "./saxon9he/saxon9he.jar"
 
+    list_dir_tree(input_dir)
+    print ''
+    exit(-1)
+
     # if you can run the command without '-cp' parameter
     # use: command = "java net.sf.saxon.Query ..." directly
     command = "java -cp {} net.sf.saxon.Query " \
@@ -581,7 +614,6 @@ def main_LeNC():
 def file_filter(path, files):
     res_dirs, res_files = [], []
     for fname in files:
-        print fname
         suffix = fname.split('.')[-1]
         if fname.startswith('.'):
             continue
@@ -594,14 +626,6 @@ def file_filter(path, files):
 
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
-    # main_SoNaR()
+    main_TwNC()
     # process_multi()
-    input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
-    # files = os.listdir(input_dir)
-    # dirs, files = file_filter(input_dir, files)
-    group = [[] for _ in range(3)]
-    for i in range(10):
-        #if group[i] is None:
-        #    group[i] = []
-        group[i%len(group)].append(i)
-    print group
+    # input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
