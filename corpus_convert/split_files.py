@@ -609,11 +609,10 @@ def xq_TwNC(fname, tmpDIR_dir_proc, output_dir, command=''):
     output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
 
     # run xQuery command
-    # log_fname = '/home/enzocxt/tmp/log.txt'
     cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir_proc, output_fname)
     status = os.system(cmd)
     if status != 0:  # command does not succeed
-        logging.error(fname)
+        logging.error('\ninput file: {}\noutput file: {}'.format(fname, output_fname))
 
     # remove input file in tmpDIR_dir
     os.system("rm {}".format(input_fname))
@@ -627,11 +626,10 @@ def xq_LeNC(fname, tmpDIR_dir_proc, output_dir, command=''):
     output_fname = FilenameGetter.get_output_fname_LeNC(tmp_in_fname, output_dir)
 
     # run xQuery command
-    # log_fname = '/home/enzocxt/tmp/log.txt'
     cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir_proc, output_fname)
     status = os.system(cmd)
     if status != 0:  # command does not succeed
-        logging.error(fname)
+        logging.error('\ninput file: {}\noutput file: {}'.format(fname, output_fname))
 
     # remove input file in tmpDIR_dir
     os.system("rm {}".format(input_fname))
