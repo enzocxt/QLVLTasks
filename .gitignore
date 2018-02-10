@@ -1,3 +1,4 @@
+*/*.pyc
 corpus_convert/data
 corpus_convert/output
 corpus_convert/saxon*
