@@ -1,4 +1,4 @@
-# from __future__ import absolute_import
+import os
 
 from corpconv.utils import timeit, list_dir_tree
 from corpconv.main import process, process_multi
@@ -40,6 +40,12 @@ def main_SoNaR():
     metaNL_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/WR-P-P-G_newspapers.lectinfo.ned.txt"
     metadata_files = (metaBE_fname, metaNL_fname)
 
+    # check whether paths exist
+    paths = [input_dir, output_dir, xq_fname, saxon_jar, metaBE_fname, metaNL_fname]
+    for p in paths:
+        if not os.path.exists(p):
+            raise AttributeError("File or directory not exists: \n{}".format(p))
+
     list_dir_tree(input_dir)
     # if you can run the command without '-cp' parameter
     # use: command = "java net.sf.saxon.Query ..." directly
@@ -56,6 +62,12 @@ def main_TwNC():
     xq_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/universal_dependencies_2.0-TwNC.xq"
     mode = "conll"
     saxon_jar = "./saxon9he/saxon9he.jar"
+
+    # check whether paths exist
+    paths = [input_dir, output_dir, xq_fname, saxon_jar]
+    for p in paths:
+        if not os.path.exists(p):
+            raise AttributeError("File or directory not exists: \n{}".format(p))
 
     list_dir_tree(input_dir)
     # if you can run the command without '-cp' parameter
@@ -76,6 +88,12 @@ def main_LeNC():
     mode = "conll"
     saxon_jar = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/saxon9he/saxon9he.jar"
 
+    # check whether paths exist
+    paths = [input_dir, output_dir, dtd_fname, xq_fname, saxon_jar]
+    for p in paths:
+        if not os.path.exists(p):
+            raise AttributeError("File or directory not exists: \n{}".format(p))
+
     list_dir_tree(input_dir)
     # if you can run the command without '-cp' parameter
     # use: command = "java net.sf.saxon.Query ..." directly
@@ -87,4 +105,4 @@ def main_LeNC():
 
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
-    main_TwNC()
+    main_SoNaR()
