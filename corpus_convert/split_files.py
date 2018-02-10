@@ -41,6 +41,7 @@ logger.addHandler(file_handler)
 '''
 
 
+# decorators
 def trace(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -75,6 +76,11 @@ def timeit(fn):
 
 
 def list_dir_tree(rootpath):
+    """
+    show directory tree
+    :param rootpath:
+    :return:
+    """
     for root, dirs, files in sorted(os.walk(rootpath)):
         level = root.replace(rootpath, '').count(os.sep)
         indent = ' ' * 4 * (level)
@@ -226,6 +232,7 @@ class FilenameGetter(object):
         'NB': 'het_nieuwsblad',
         'DM': 'de_morgen',
     }
+
     @classmethod
     def get_output_fname_SoNaR(cls, file_id, output_dir, meta_dict):
         ned_set = {'nrc_handelsblad', 'trouw', 'volkskrant', 'unknown', 'algemeen_dagblad'}
@@ -424,7 +431,7 @@ class SoNaRConverter(Converter):
 
         # call multiprocessing function for files
         if len(files) > 0:
-            call_multi(self._corpus_name, input_root, io_paths, files, command=command, dtd_fname=dtd_fname, meta_dict=meta_dict)
+            call_multi(cls._corpus_name, input_root, io_paths, files, command=command, dtd_fname=dtd_fname, meta_dict=meta_dict)
 
         # recursively call self for dirs
         dirs = tqdm(sorted(dirs), unit='dir', desc='{}{}'.format(indent, input_dir.split('/')[-1]), leave=pg_leave)
@@ -764,5 +771,3 @@ def main_LeNC():
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
     main_LeNC()
-    # process_multi()
-    # input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
