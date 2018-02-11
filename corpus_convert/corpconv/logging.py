@@ -4,8 +4,31 @@ import contextlib
 import logging
 import logging.handlers
 import os
+import sys
 
 
+default_handler = logging.StreamHandler('sys.stderr')
+default_handler.setFormatter(logging.Formatter(
+    '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+))
+
+
+def create_logger(app):
+    """
+    Get the 'flask.app' logger and configure it if needed.
+
+    When :attr:`~flask.Flask.debug` is enabled, set the logger level to
+    :data:`logging.DEBUG` if it is not set.
+
+    If there is no handler for the logger's effective level, add a
+    :class:`~logging.StreamHandler` for
+    :func:`~flask.logging.wsgi_errors_stream` with a basic format.
+    """
+    logger = logging.getLogger('convert')
+
+    return logger
+
+'''
 class LogState(object):
 
     def __init__(self):
@@ -57,3 +80,4 @@ class ColorizedStreamHandler(logging.StreamHandler):
         msg = logging.StreamHandler.format(self, record)
 
         return msg
+'''

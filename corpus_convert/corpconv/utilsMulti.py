@@ -16,6 +16,21 @@ logging.basicConfig(level=logging.INFO,
                     datefmt='%m-%d %H:%M',
                     filemode='w')
 logger = logging.getLogger('MultiProc_Convert')
+'''
+handler_console = 'console'
+logger = logging.getLogger('logger')
+# console_logger.setLevel(logging.INFO)
+# console_logger.addHandler()
+
+# create StreamHandler
+console = logging.StreamHandler(stream=None)
+console.setLevel(logging.INFO)
+logger.addHandler(console)
+# create FileHandler
+log_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/log.txt"
+file_handler = logging.FileHandler(log_fname, mode='w', encoding=None, delay=False)
+logger.addHandler(file_handler)
+'''
 
 
 def call_multi(corpus_name, input_root, io_paths, files, command='', dtd_fname=None, meta_dict=None):

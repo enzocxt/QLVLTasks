@@ -6,9 +6,6 @@ import functools
 import time
 import traceback
 import codecs
-import multiprocessing as mp
-
-from tqdm import tqdm
 
 
 def trace(fn):
@@ -105,3 +102,4 @@ def copy_to_tmp(filename, tmpdir):
         return xml_fname
     else:
         return False
+

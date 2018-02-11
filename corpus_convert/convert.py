@@ -1,31 +1,7 @@
 import os
 
 from corpconv.utils import timeit, list_dir_tree
-from corpconv.main import process, process_multi
-
-
-'''
-log_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/log.txt"
-logging.basicConfig(level=logging.INFO,
-                    filename=log_fname,
-                    format='%(asctime)s %(name)-4s %(levelname)-4s %(message)s',
-                    datefmt='%m-%d %H:%M',
-                    filemode='w')
-                    
-handler_console = 'console'
-logger = logging.getLogger('logger')
-# console_logger.setLevel(logging.INFO)
-# console_logger.addHandler()
-
-# create StreamHandler
-console = logging.StreamHandler(stream=None)
-console.setLevel(logging.INFO)
-logger.addHandler(console)
-# create FileHandler
-log_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/log.txt"
-file_handler = logging.FileHandler(log_fname, mode='w', encoding=None, delay=False)
-logger.addHandler(file_handler)
-'''
+from corpconv.CorpusParser import CorpusParser
 
 
 @timeit
@@ -52,7 +28,8 @@ def main_SoNaR():
     command = "java -cp {} net.sf.saxon.Query " \
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
     # process('SoNaR', input_dir, output_dir, command=command)
-    process_multi('SoNaR', input_dir, output_dir, command=command, meta_files=metadata_files)
+    corppar = CorpusParser('SoNaR', input_dir, output_dir, command=command, meta_files=metadata_files)
+    corppar.run_multi()
 
 
 @timeit
@@ -75,7 +52,8 @@ def main_TwNC():
     command = "java -cp {} net.sf.saxon.Query " \
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
     # process('TwNC', input_dir, output_dir, command=command)
-    process_multi('TwNC', input_dir, output_dir, command=command)
+    corppar = CorpusParser('TwNC', input_dir, output_dir, command=command)
+    corppar.run_multi()
 
 
 @timeit
@@ -100,7 +78,8 @@ def main_LeNC():
     command = "java -cp {} net.sf.saxon.Query " \
               "-q:{} MODE={}".format(saxon_jar, xq_fname, mode)
     # process('LeNC', input_dir, output_dir, command=command, dtd_fname=dtd_fname)
-    process_multi('LeNC', input_dir, output_dir, command=command, dtd_fname=dtd_fname)
+    corppar = CorpusParser('LeNC', input_dir, output_dir, command=command, dtd_fname=dtd_fname)
+    corppar.run_multi()
 
 
 if __name__ == '__main__':
