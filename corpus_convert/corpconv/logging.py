@@ -1,11 +1,6 @@
 from __future__ import absolute_import
 
-import contextlib
-import logging
-import logging.handlers
-import os
-import sys
-
+from typetoken import logging
 
 default_handler = logging.StreamHandler('sys.stderr')
 default_handler.setFormatter(logging.Formatter(

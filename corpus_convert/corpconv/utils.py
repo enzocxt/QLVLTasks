@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import os
-import logging
+from typetoken import logging
 import functools
 import time
 import traceback

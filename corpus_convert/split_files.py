@@ -1,12 +1,11 @@
 import os
-import sys
 import shutil
 import codecs
 import time
 
 from tqdm import tqdm
 
-import logging
+from typetoken import logging
 import functools
 import traceback
 
