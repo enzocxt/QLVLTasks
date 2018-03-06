@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import os
-from typetoken import logging
+import logging
 import multiprocessing as mp
 from tqdm import tqdm
 
