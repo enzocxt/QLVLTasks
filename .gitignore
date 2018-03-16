@@ -6,4 +6,5 @@ corpus_convert/Saxon*
 corpus_convert/*.txt
 corpus_convert/log*
 corpus_convert/*.xq
+corpus_convert/*.log
 .idea
