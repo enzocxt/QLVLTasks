@@ -1,12 +1,4 @@
-#!/usr/bin/env python
-
-'''
-Script for converting dependency trees in Alpino XML format to tabular
-format (e.g. the MALT-Tab format).
-'''
-
-__author__ = 'Erwin Marsi <e.c.marsi@uvt.nl>'
-__version__ = '$Id: alpino2tab.py,v 1.9 2006/01/13 10:24:35 erwin Exp $'
+from __future__ import absolute_import
 
 import sys
 import string
@@ -16,55 +8,51 @@ import codecs
 from xml.dom.minidom import parseString, Node
 
 
+options_dict = {
+    'all_warns': True,
+    'blanks': False,
+    'concat_mwu': True,
+    'encoding': 'latin-1',
+    'file': True,
+    'link_du': True,
+    'mark_mwu_alpino': False,
+    'projective': True,
+    'root': True,
+    'terminator': '',
+    'word_count': True,
+}
+
+
+class Options(object):
+    def __init__(self, options_dict):
+        self.all_warns = options_dict['all_warns']
+        self.blanks = options_dict['blanks']
+        self.concat_mwu = options_dict['concat_mwu']
+        self.encoding = options_dict['encoding']
+        self.file = options_dict['file']
+        self.link_du = options_dict['link_du']
+        self.mark_mwu_alpino = options_dict['mark_mwu_alpino']
+        self.projective = options_dict['projective']
+        self.root = options_dict['root']
+        self.terminator = options_dict['terminator']
+        self.word_count = options_dict['word_count']
+
+
+options = Options(options_dict)
+
+
 class ConversionError(Exception):
     pass
 
 
 class NegativeHeadError(ConversionError):
     pass
-    
-    
 
-
-def convert(xmlstream, tabstream):
-    """
-    convert dependency tree in Alpino XML format to tabular format.
-    """
-    dom = parseString(string.join(xmlstream.readlines()))
-    removeWhitespaceNodes(dom.documentElement)
-	
-    alpinods = dom.documentElement.childNodes
-	
-    tabstream.write('<article>\n')
-    
-    for tree in alpinods:
-	
-        topnode = topNode(tree)
-        tokens = getTokens(tree)
-        comment = tree.getElementsByTagName("comment")[0].firstChild.nodeValue[2:21]
-    
-        removeEmptyNodes(tree)
-
-        if options.concat_mwu:
-            concatMultiWordUnits(tree, tokens)
-    
-        substituteHeadForPhrase(topnode)
-    
-        index = {}
-        createIndex(topnode, index)
-
-        reattachPunctuation(topnode, index)
-        tabstream.write('<sentence>\n')
-        tabstream.write('<file-id>'+comment+'</file-id>\n')
-        writeOutput(tokens, index, tabstream)
-        tabstream.write('</sentence>\n')
-
-    tabstream.write('</article>')
 
 def removeWhitespaceNodes(node):
     """
     remove the empty text nodes caused white space(indenting)
-    in the input XML  
+    in the input XML
     """
     # can be avoided by passing a DTD to the dom parser
     for child in list(node.childNodes):
@@ -80,12 +68,14 @@ def removeEmptyNodes(node):
     remove empty nodes (traces) and correct 'begin' and/or 'end'
     attributes of its parent
     """
-    # The problem is that if an initial (final) daughter is empty,
-    # then the 'start' ('end') attribute of the parent equals the 
-    # 'start' ('end') attribute of the antecedent.
-    # Hence, when conatenating the tokens of a MWU, we get unintended results.
-    # The solution is to remove empty nodes first, and to correct the indices of
-    # its ancestors (that's the reason we traverse the tree bottom-up). 
+    '''
+    The problem is that if an initial (final) daughter is empty,
+    then the 'start' ('end') attribute of the parent equals the 
+    'start' ('end') attribute of the antecedent.
+    Hence, when conatenating the tokens of a MWU, we get unintended results.
+    The solution is to remove empty nodes first, and to correct the indices of
+    its ancestors (that's the reason we traverse the tree bottom-up). 
+    '''
     for child in list(node.childNodes):
         if not child.getAttribute('pos') and not child.getAttribute('cat'):
             node.removeChild(child)
@@ -103,12 +93,14 @@ def reattachPunctuation(topnode, index):
     detaches a punctuation symbol from the top node and reattaches it 
     to the first non-punctation token preceding it
     """
-    # Punctuation symbols are all attached to the top node. This is major
-    # source of unnecessary non-projectivity. Therefore punctuation symbols
-    # are reattached so that their head becomes the first non-punctation token
-    # preceding. Punctuation symbols at the start of te sentence remain
-    # attached to the top node, as this poses no problem as far as
-    # projectivity is concerned.
+    '''
+    Punctuation symbols are all attached to the top node. This is major
+    source of unnecessary non-projectivity. Therefore punctuation symbols
+    are reattached so that their head becomes the first non-punctation token
+    preceding. Punctuation symbols at the start of te sentence remain
+    attached to the top node, as this poses no problem as far as
+    projectivity is concerned.
+    '''
     for child in list(topnode.childNodes):
         #for (name, value) in child.attributes.items():
         #    print '    Attr -- Name: %s  Value: %s' % (name, value)
@@ -118,16 +110,17 @@ def reattachPunctuation(topnode, index):
             # try the first preceding token
             i = int(child.getAttribute('begin')) - 1
             # search further to the left as long as were still on a punctuation token
-            while i>=0 and index[i].getAttribute('pos') == 'punct':
+            while i >= 0 and index[i].getAttribute('pos') == 'punct':
                 i -= 1
             # unless we fell off the start of the sentence, 
             # meaning this was sentence-initial punctuation,
             # reattach the child
-            if i>=0:
+            if i >= 0:
                 child.setAttribute('rel', 'punct')
                 topnode.removeChild(child)
                 index[i].appendChild(child)
-                
+
+
 def topNode(dom):
     """
     return the top node from the dependency tree
@@ -135,13 +128,17 @@ def topNode(dom):
     for child in dom.childNodes:
         if child.tagName == 'node':
             return child
-    raise 'Error: cannot find top node'
+    raise RuntimeError('Error: cannot find top node')
 
 
 def getTokens(dom):
     """
     return the tokens from the sentence
     """
+    # there is only one sentence element, so use first [0]
+    # the sentence element has only one child node which is a text node
+    # the xml string of this text node is actually the sentence text
+    # the data of it is the string of this sentence
     sentence = dom.getElementsByTagName("sentence")[0].childNodes[0].data
     return sentence.split()
 
@@ -153,8 +150,7 @@ def getFileId(dom):
     comment = dom.getElementsByTagName("comment")[0].childNodes[0].data
     return comment[2:21]
 
-    
-    
+
 def concatMultiWordUnits(dom, tokens):
     """
     removes the child nodes from multi word units, 
@@ -163,60 +159,60 @@ def concatMultiWordUnits(dom, tokens):
     nodes = dom.getElementsByTagName('node')
     
     for node in nodes:
-        if node.getAttribute('cat') == 'mwu': 
-            begin = int(node.getAttribute('begin'))
-            end = int(node.getAttribute('end'))
-            decr = end - begin - 1
+        if node.getAttribute('cat') != 'mwu':
+            continue
+        begin = int(node.getAttribute('begin'))
+        end = int(node.getAttribute('end'))
+        decr = end - begin - 1
 
-            if options.mark_mwu_alpino:
-                mwu = string.join(tokens[begin:end], '_')
-                mwu = "[_@mwu_" + mwu +"_]" #replace _ later
-            else:
-                mwu = string.join(tokens[begin:end], '_')
+        if options.mark_mwu_alpino:
+            mwu = '_'.join(tokens[begin:end])
+            mwu = "[_@mwu_" + mwu +"_]"     # replace _ later
+        else:
+            mwu = '_'.join(tokens[begin:end])
 
+        # replace original tokens by concatenated tokens
+        tokens[begin:end] = [mwu]
 
-            # replace original tokens by concatenated tokens
-            tokens[begin:end] = [mwu]
-            
-            pos = root = ''
+        pos = root = ''
 
-            # remove children
-            for child in list(node.childNodes):
-                # also concat pos and root;
-                # this assumes that the children are correctly ordered...
-                # pos += child.getAttribute('pos') + '_'
-                root += child.getAttribute('root') + '_'
-                nodes.remove(child)
-                node.removeChild(child)
-                child.unlink()
-            
-            # node.setAttribute('pos', pos[:-1])
-            node.setAttribute('pos', 'mwu')
-            node.setAttribute('root', root[:-1])
-            node.setAttribute('word', mwu)     
-            node.removeAttribute('cat')  
-                
-            # now correct the tokens position indices for all subsequent nodes
-            for node2 in nodes:
+        # remove children
+        for child in list(node.childNodes):
+            # also concat pos and root;
+            # this assumes that the children are correctly ordered...
+            # pos += child.getAttribute('pos') + '_'
+            root += child.getAttribute('root') + '_'
+            nodes.remove(child)
+            node.removeChild(child)
+            child.unlink()
+
+        # node.setAttribute('pos', pos[:-1])
+        node.setAttribute('pos', 'mwu')
+        node.setAttribute('root', root[:-1])
+        node.setAttribute('word', mwu)
+        node.removeAttribute('cat')
+
+        # now correct the tokens position indices for all subsequent nodes
+        for node2 in nodes:
+            #print node2.getAttribute('root')
+            try:
+                begin2 = int(node2.getAttribute('begin'))
+                #print begin2, " ", begin, " ", node.getAttribute('root')
                 #print node2.getAttribute('root')
-                try:
-                    begin2 = int(node2.getAttribute('begin'))
-                    #print begin2, " ", begin, " ", node.getAttribute('root')
-                    #print node2.getAttribute('root')
-                    if begin2 > begin:
-                        begin2 -= decr
-                        if begin2 < 0:
-                            raise NegativeHeadError
-                        node2.setAttribute('begin', str(begin2))
-                    end2 = int(node2.getAttribute('end')) 
-                    if end2 > begin:
-                        end2 -= decr
-                        if end2 < 0:
-                            raise NegativeHeadError
-                        node2.setAttribute('end', str(end2))
-                except ValueError:
-                    # empty nodes have no start & begin
-                    pass
+                if begin2 > begin:
+                    begin2 -= decr
+                    if begin2 < 0:
+                        raise NegativeHeadError
+                    node2.setAttribute('begin', str(begin2))
+                end2 = int(node2.getAttribute('end'))
+                if end2 > begin:
+                    end2 -= decr
+                    if end2 < 0:
+                        raise NegativeHeadError
+                    node2.setAttribute('end', str(end2))
+            except ValueError:
+                # empty nodes have no start & begin
+                pass
 
 
 def substituteHeadForPhrase(parent):
@@ -237,7 +233,7 @@ def substituteHeadForPhrase(parent):
         if parent.getAttribute('cat') == 'top':
             return
 
-        if (parent.getAttribute('cat') == 'du' and not options.link_du):
+        if parent.getAttribute('cat') == 'du' and not options.link_du:
             for child in parent.childNodes:
                 # du's become linked to root
                 child.setAttribute('rel', '--')
@@ -278,21 +274,25 @@ def headChild(parent):
             
         # - du (discourse unit): prefer dlink, take nucl otherwise 
         # (see below for dp)
-        if ( par_cat == 'du' and child_rel ==  ('dlink', 'nucl')):
+        if par_cat == 'du' and child_rel == ('dlink', 'nucl'):
             return child
 
     else:
-        # Some rather arbitrary solution for exceptional cases:
-        # just take the first daughter as head. This occurs with:
-        # - mwu (multi word unit), unless --concat-mwu option
-        # - coordination without a conjunction (vg)
-        # - du (discourse unit) without nucl
-        # Note: stderr cannot handle unicode
+        '''
+        Some rather arbitrary solution for exceptional cases:
+        just take the first daughter as head. This occurs with:
+        - mwu (multi word unit), unless --concat-mwu option
+        - coordination without a conjunction (vg)
+        - du (discourse unit) without nucl
+        Note: stderr cannot handle unicode
+        '''
+        '''
         if par_cat not in ('mwu', 'conj') or options.all_warns:
             print >>sys.stderr, 'Warning: cannot find head child for parent:'
             print >>sys.stderr,  '\t', parent.toprettyxml().split('\n')[0].encode('ascii','backslashreplace')
             print >>sys.stderr, 'default to first child:'
             print >>sys.stderr, '\t', parent.firstChild.toprettyxml().split('\n')[0].encode('ascii','backslashreplace')
+        '''
         return parent.firstChild
 
 
@@ -307,12 +307,75 @@ def createIndex(parent, index=None):
             
     for child in parent.childNodes:
         createIndex(child, index)
-    
+
+
+def writeOutputNew(tokens, index, tabstream=sys.stdout):
+    try:
+        test = None
+        for i in range(len(tokens)):
+            test = index[i]
+    except:
+        print(len(index.keys()))
+        print(len(tokens))
+        exit(-1)
+
+    for i, word in enumerate(tokens):
+        if options.word_count:
+            if options.blanks:
+                tabstream.write('%-4d' % (i + 1))
+            else:
+                tabstream.write('%d\t' % (i + 1))
+
+        if options.blanks:
+            tabstream.write('%-20s  ' % word)
+        else:
+            tabstream.write('%s\t' % word)
+
+        if options.root:
+            root = index[i].getAttribute('root').replace(' ', '_')
+            if options.blanks:
+                tabstream.write('%-20s  ' % root)
+            else:
+                tabstream.write('%s\t' % root)
+
+        if options.blanks:
+            tabstream.write('%-10s  ' % index[i].getAttribute('pos'))
+        else:
+            tabstream.write('%s\t' % index[i].getAttribute('pos'))
+
+        rel = index[i].getAttribute('rel')
+
+        if rel == '--':
+            rel = 'ROOT'
+            head = 0
+        else:
+            head = int(index[i].parentNode.getAttribute('begin')) + 1
+
+        if options.blanks:
+            tabstream.write('%-4d%-10s  ' % (head, rel))
+        else:
+            tabstream.write('%d\t%s' % (head, rel))
+
+        if options.projective:
+            if options.blanks:
+                tabstream.write('  _  _')
+            else:
+                tabstream.write('\t_\t_')
+
+        tabstream.write('\n')
+
+    if options.terminator:
+        tabstream.write('%s' % options.terminator)
+
 
 def writeOutput(tokens, index, tabstream=sys.stdout):
     """
     write output in tabular form
     """
+    for i in range(len(tokens)):
+        if i not in index:
+            raise KeyError
+
     for i, word in enumerate(tokens):
         if options.word_count:
             if options.blanks:
@@ -359,21 +422,24 @@ def writeOutput(tokens, index, tabstream=sys.stdout):
         tabstream.write('\n')
         
     if options.terminator:
-        tabstream.write('%s' %  options.terminator)
+        tabstream.write('%s' % options.terminator)
     
 
 def printIndices(dom, tokens):
     # a debug function
     for node in dom.getElementsByTagName('node'):
+        begin = node.getAttribute('begin')
+        end = node.getAttribute('end')
         if node.getAttribute('pos'):
-            print '%2s %2s %8s %20s <==> %s' % ( node.getAttribute('begin'),
-                                                 node.getAttribute('end'),
-                                                 node.getAttribute('pos'),
-                                                 node.getAttribute('word'),
-                                                 tokens[int(node.getAttribute('begin')):int(node.getAttribute('end'))])
-            
-    
+            print('%2s %2s %8s %20s <==> %s' %
+                  (begin,
+                   end,
+                   node.getAttribute('pos'),
+                   node.getAttribute('word'),
+                   tokens[int(begin):int(end)]))
 
+
+'''
 # main stuff    
 
 usage = \
@@ -484,7 +550,8 @@ else:
 #options.blanks = False
 #options.root = True
 #options.file = True
-#options.encoding = 'utf-8'
+#options.encoding = 'latin1'
 #options.mark_mwu_alpino = False
 #options.concat_mwu = True
 #options.link_du = True
+'''

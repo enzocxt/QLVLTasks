@@ -56,6 +56,11 @@ def main_TwNC():
     corppar.run_multi()
 
 
+''' Method calling procedure
+main_LeNC()
+=> run_multi()
+=> convert_multi()
+'''
 @timeit
 def main_LeNC():
     # modify the following paths if needed
@@ -84,4 +89,5 @@ def main_LeNC():
 
 if __name__ == '__main__':
     output_filename = "{newspaper_name}_{date}.conllu"
-    main_SoNaR()
+    main_LeNC()
+    # main_TwNC()

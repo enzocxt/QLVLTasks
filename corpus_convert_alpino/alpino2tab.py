@@ -14,7 +14,40 @@ import codecs
 from xml.dom.minidom import parseString, Node
 
 from corpconv.utils import timeit, list_dir_tree
-from corpconv.CorpusParser import CorpusParser
+from corpconv.baseParser import CorpusParser
+
+
+options_dict = {
+    'all_warns': True,
+    'blanks': False,
+    'concat_mwu': True,
+    'encoding': 'latin-1',
+    'file': True,
+    'link_du': True,
+    'mark_mwu_alpino': False,
+    'projective': True,
+    'root': True,
+    'terminator': '',
+    'word_count': True,
+}
+
+
+class Options(object):
+    def __init__(self, options_dict):
+        self.all_warns = options_dict['all_warns']
+        self.blanks = options_dict['blanks']
+        self.concat_mwu = options_dict['concat_mwu']
+        self.encoding = options_dict['encoding']
+        self.file = options_dict['file']
+        self.link_du = options_dict['link_du']
+        self.mark_mwu_alpino = options_dict['mark_mwu_alpino']
+        self.projective = options_dict['projective']
+        self.root = options_dict['root']
+        self.terminator = options_dict['terminator']
+        self.word_count = options_dict['word_count']
+
+
+options = Options(options_dict)
 
 
 class ConversionError(Exception):
@@ -25,11 +58,67 @@ class NegativeHeadError(ConversionError):
     pass
 
 
-def convert(xmlstream, tabstream):
+class TwNCConverter(object):
+
+    @classmethod
+    def convert(cls, xmlstream, tabstream):
+        """
+        convert dependency tree in Alpino XML format to tabular format.
+        """
+        dom = parseString(string.join(xmlstream.readlines()))
+        removeWhitespaceNodes(dom.documentElement)
+
+        alpinods = dom.documentElement.childNodes
+
+        tabstream.write('<article>\n')
+
+        for tree in alpinods:
+            topnode = topNode(tree)
+            tokens = getTokens(tree)
+
+            removeEmptyNodes(tree)
+
+            if options.concat_mwu:
+                concatMultiWordUnits(tree, tokens)
+
+            substituteHeadForPhrase(topnode)
+
+            index = {}
+            createIndex(topnode, index)
+
+            reattachPunctuation(topnode, index)
+            tabstream.write('<sentence>\n')
+            writeOutput(tokens, index, tabstream)
+            tabstream.write('</sentence>\n')
+
+        tabstream.write('</article>')
+
+    @classmethod
+    def topNode(cls, dom):
+        """
+        return the top node from the dependency tree
+        """
+        for child in dom.childNodes:
+            if child.tagName == 'node':
+                return child
+        raise ValueError('Error: cannot find top node')
+
+    @classmethod
+    def getTokens(cls, dom):
+        """
+        return the tokens from the sentence
+        """
+        sentence = dom.getElementsByTagName("sentence")[0].childNodes[0].data
+        return sentence.split()
+
+
+
+def convert_LeNC(xmlstream, tabstream):
     """
     convert dependency tree in Alpino XML format to tabular format.
     """
     dom = parseString(string.join(xmlstream.readlines()))
+    print(dom.documentElement)
     removeWhitespaceNodes(dom.documentElement)
 
     articles = dom.getElementsByTagName("article.published")
@@ -524,19 +613,6 @@ def setup_parser():
 
 
 def main_TwNC():
-    options = {
-        'all_warns': True,
-        'blanks': False,
-        'concat_mwu': True,
-        'encoding': 'latin-1',
-        'file': True,
-        'link_du': True,
-        'mark_mwu_alpino': False,
-        'projective': True,
-        'root': True,
-        'terminator': '',
-        'word_count': True,
-    }
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
     output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert/output"
 
@@ -547,15 +623,16 @@ def main_TwNC():
             raise AttributeError("File or directory not exists: \n{}".format(p))
 
     list_dir_tree(input_dir)
-    command = "python "
     xml_fn = '/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn/1999/ad/ad19991229.alpino.xml'
     tab_fn = os.path.basename(xml_fn).replace('.xml', '.conll')
-    with open(xml_fn) as xml_inf, codecs.open(tab_fn, 'w', options['encoding']) as tab_outf:
-        convert(xml_inf, tab_outf)
+    with open(xml_fn) as xml_inf, codecs.open(tab_fn, 'w', options.encoding) as tab_outf:
+        TwNCConverter.convert(xml_inf, tab_outf)
 
 
 if __name__ == '__main__':
     # main stuff
+
+    main_TwNC()
 
     usage = \
     """
@@ -568,6 +645,7 @@ if __name__ == '__main__':
         FILES              dependency trees in Alpino XML format
     """
 
+    '''
     # -c -e'latin-1' -f -a -l -p -r -w
     parser = setup_parser()
     (options, args) = parser.parse_args()
@@ -590,4 +668,5 @@ if __name__ == '__main__':
                     convert(open(xml_fn), codecs.EncodedFile(sys.stdout, options.encoding))
             except NegativeHeadError:
                 print >>sys.stderr, 'ERROR: negative value for head. Skipping input file', xml_fn
+    '''
 
