@@ -10,7 +10,7 @@ corpus_convert/log*
 corpus_convert/*.log
 corpus_convert/*.xq
 
-corpus_convert_alpino/data
+# alpino2tab
 corpus_convert_alpino/output*
 corpus_convert_alpino/*.txt
 corpus_convert_alpino/*.log
