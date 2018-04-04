@@ -12,7 +12,8 @@ options_dict = {
     'all_warns': True,
     'blanks': False,
     'concat_mwu': True,
-    'encoding': 'latin-1',
+    # not used in utils
+    # 'encoding': 'latin-1',
     'file': True,
     'link_du': True,
     'mark_mwu_alpino': False,
@@ -28,7 +29,7 @@ class Options(object):
         self.all_warns = options_dict['all_warns']
         self.blanks = options_dict['blanks']
         self.concat_mwu = options_dict['concat_mwu']
-        self.encoding = options_dict['encoding']
+        # self.encoding = options_dict['encoding']
         self.file = options_dict['file']
         self.link_du = options_dict['link_du']
         self.mark_mwu_alpino = options_dict['mark_mwu_alpino']
@@ -47,6 +48,30 @@ class ConversionError(Exception):
 
 class NegativeHeadError(ConversionError):
     pass
+
+
+def split_by_tagname(text, tagname):
+    """
+    split the xml text by tagname
+    """
+    tags = []
+    start = '<{}'.format(tagname)   # start tag should not include '>'
+    end = '</{}>'.format(tagname)
+    ls, le = len(start), len(end)
+    size = len(text)
+    i = 0
+    while True:
+        idx_start = text.find(start, i)
+        idx_end = text.find(end, idx_start)
+        if idx_start < 0 or idx_end < 0:
+            # tag not found
+            break
+        tags.append(text[idx_start:(idx_end + le)])
+        i = idx_end + le
+        if i >= size:
+            break
+
+    return tags
 
 
 def removeWhitespaceNodes(node):
@@ -139,7 +164,17 @@ def getTokens(dom):
     # the sentence element has only one child node which is a text node
     # the xml string of this text node is actually the sentence text
     # the data of it is the string of this sentence
-    sentence = dom.getElementsByTagName("sentence")[0].childNodes[0].data
+
+    # sentence = dom.getElementsByTagName("sentence")[0].childNodes[0].data
+
+    sentence = dom.getElementsByTagName('sentence')
+    if len(sentence) == 0:
+        return []
+    sentence = sentence[0].childNodes
+    if len(sentence) == 0:
+        return []
+    sentence = sentence[0].data
+
     return sentence.split()
 
 

@@ -16,3 +16,5 @@ corpus_convert_alpino/*.txt
 corpus_convert_alpino/*.log
 corpus_convert_alpino/test*
 corpus_convert_alpino/tmp*
+corpus_convert_alpino/*.bak
+corpus_convert_alpino/*files

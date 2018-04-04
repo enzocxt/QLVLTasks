@@ -92,7 +92,7 @@ def alpino2tab(input_fname, output_fname):
                                  "\nxml.parsers.expat.ExpatError: not well-formed (invalid token)"
                                  .format(fname))
                     continue
-                except Exception, e:
+                except Exception as e:
                     logger.error("\ninput file: {}"
                                  "\nError: cannot parse xml sentence\n{}"
                                  .format(fname, e))
@@ -103,7 +103,7 @@ def alpino2tab(input_fname, output_fname):
 
                 try:
                     convert(tree, tabstream)
-                except NegativeHeadError, e:
+                except NegativeHeadError as e:
                     logger.error("\ninput file: {}"
                                  "\nNegativeHeadError: {}"
                                  .format(fname, e))
@@ -111,7 +111,7 @@ def alpino2tab(input_fname, output_fname):
                     logger.error("\ninput file: {}"
                                  "\nKeyError: writeOutput() for sentence"
                                  .format(fname))
-                except Exception, e:
+                except Exception as e:
                     logger.error("\ninput file: {}"
                                  "\nError: {}"
                                  .format(fname, e))
@@ -140,7 +140,7 @@ def convert(tree, tabstream):
     removeWhitespaceNodes(tree)
     topnode = topNode(tree)
     ss = tree.getElementsByTagName('sentence')
-    sentence = ss[0].childNodes[0].data
+    # sentence = ss[0].childNodes[0].data
     tokens = getTokens(tree)
 
     removeEmptyNodes(tree)
@@ -152,14 +152,21 @@ def convert(tree, tabstream):
 
     index = {}
     createIndex(topnode, index)
+    words = [e.getAttribute('word') for e in index.values()]
+    tokens = [''.join(w.split()) for w in words]
+    # assert(len(tokens) == len(index.keys()))
     '''
-    if sentence.startswith("De Surinaamse politicus"):
-        print(sentence)
-        nodes = index.values()
-        print('\n'.join([n.toxml() for n in nodes]))
+    roots = [e.getAttribute('word') for e in index.values()]
+    if len(words) != len(tokens) or len(roots) != len(tokens):
+        for w, r in zip(words, roots):
+            if w != r:
+                print(w, r)
+        words = [''.join(w.split()) for w in words]
     '''
 
     reattachPunctuation(topnode, index)
-    tabstream.write('<sentence>\n')
-    writeOutputNew(tokens, index, tabstream)
-    tabstream.write('</sentence>\n')
+    # tabstream.write('<sentence>\n')
+    sent_str = writeOutputNew(tokens, index, tabstream)
+    # tabstream.write('</sentence>\n')
+    sent_str = '<sentence>\n{}\n</sentence>'.format(sent_str)
+    tabstream.write(sent_str)

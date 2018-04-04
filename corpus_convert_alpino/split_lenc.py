@@ -27,6 +27,30 @@ class Sentence(object):
         return res
 
 
+def split_by_tagname(text, tagname):
+    """
+    split the xml text by tagname
+    """
+    tags = []
+    start = '<{}>'.format(tagname)
+    end = '</{}>'.format(tagname)
+    ls, le = len(start), len(end)
+    size = len(text)
+    i = 0
+    while True:
+        idx_start = text.find(start, i)
+        idx_end = text.find(end, idx_start)
+        if idx_start < 0 or idx_end < 0:
+            # tag not found
+            break
+        tags.append(text[idx_start:(idx_end + le)])
+        i = idx_end + le
+        if i >= size:
+            break
+
+    return tags
+
+
 def find_by_tagname(text, tagname):
     start = '<{}>'.format(tagname)
     end = '</{}>'.format(tagname)
@@ -47,10 +71,11 @@ def split(filename):
 
     with codecs.open(filename, 'r', encoding='latin-1') as inf:
         context = inf.read()
-        articles = context.split('</article>')
-        articles = [(art + '</article>').strip() for art in articles if len(art.strip()) > 0]
+        # articles = context.split('</article>')
+        # articles = [(art + '</article>').strip() for art in articles if len(art.strip()) > 0]
+        articles = split_by_tagname(context, 'article')
 
-    art_dict = defaultdict(lambda : defaultdict(lambda : defaultdict(list)))
+    art_dict = defaultdict(lambda : defaultdict(lambda : defaultdict(lambda : defaultdict(list))))
     for art in articles:
         '''
         root = ET.fromstring(art)
@@ -65,47 +90,54 @@ def split(filename):
         if '<article>' not in art or '</article>' not in art:
             continue
 
+        topic = find_by_tagname(art, 'topic')
         section = find_by_tagname(art, 'section')
+        subsect = find_by_tagname(art, 'subsection')
         edition = find_by_tagname(art, 'edition')
-        author = find_by_tagname(art, 'author')
 
         blank = 'blank'
+        if topic is None or len(topic) == 0:
+            topic = blank
         if section is None or len(section) == 0:
             section = blank
+        if subsect is None or len(subsect) == 0:
+            subsect = blank
         if edition is None or len(edition) == 0:
             edition = blank
-        if author is None or len(author) == 0:
-            author = blank
 
-        sect_dict = art_dict[section]
-        edit_dict = sect_dict[edition]
-        edit_dict[author].append(art)
+        topi_dict = art_dict[topic]
+        sect_dict = topi_dict[section]
+        subs_dict = sect_dict[subsect]
+        subs_dict[edition].append(art)
 
     '''
     for k1, d1 in art_dict.items():
-        print('section: ', k1)
+        print('topic: ', k1)
         for k2, d2 in d1.items():
-            print('\tedition: ', k2)
+            print('\tsection: ', k2)
             for k3, d3 in d2.items():
-                print('\t\tauthor: ', k3)
-                print('\t\t\t', len(d3))
+                print('\t\tsubsection: ', k3)
+                for k4, d4 in d3.items():
+                    print('\t\t\tedition:', k4)
+                    print('\t\t\t\t', len(d4))
     '''
     return art_dict
 
 
 def write(filename, art_dict, coding):
-    for sect, dsect in art_dict.items():
-        for edit, dedit in dsect.items():
-            for auth, lauth in dedit.items():
-                fname = get_fname(filename, sect, edit, auth)
-                arts = '\n'.join(lauth)
-                with codecs.open(fname, 'w', coding) as outf:
-                    outf.write(arts)
+    for topi, dtopi in art_dict.items():
+        for sect, dsect in dtopi.items():
+            for subs, dsubs in dsect.items():
+                for edit, ledit in dsubs.items():
+                    fname = get_fname(filename, topi, sect, subs, edit)
+                    arts = '\n'.join(ledit)
+                    with codecs.open(fname, 'w', coding) as outf:
+                        outf.write(arts)
 
 
-def get_fname(filename, sect, edit, auth):
+def get_fname(filename, topi, sect, subs, edit):
     folder, fname = os.path.split(os.path.abspath(filename))
-    steps = [sect, edit, auth]
+    steps = [topi, sect, subs, edit]
     next_folder = folder
     for step in steps:
         next_folder = os.path.join(next_folder, step)

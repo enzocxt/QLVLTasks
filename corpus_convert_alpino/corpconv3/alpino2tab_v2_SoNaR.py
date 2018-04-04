@@ -1,13 +1,5 @@
 from __future__ import absolute_import
 
-'''
-Script for converting dependency trees in Alpino XML format to tabular
-format (e.g. the MALT-Tab format).
-'''
-
-__author__ = 'Erwin Marsi <e.c.marsi@uvt.nl>'
-__version__ = '$Id: alpino2tab.py,v 1.9 2006/01/13 10:24:35 erwin Exp $'
-
 
 import os
 import logging
@@ -69,22 +61,20 @@ options = Options(options_dict)
 def alpino2tab(input_fname, output_fname):
     fname = input_fname.split(os.sep)[-1]
     try:
-        with open(input_fname) as xmlstream, codecs.open(output_fname, 'w', 'latin-1') as tabstream:
+        with codecs.open(input_fname, 'r', options_dict['encoding']) as xmlstream,\
+             codecs.open(output_fname, 'w', options_dict['encoding']) as tabstream:
             xml_version = xmlstream.readline()    # xml version
             xmlstream.readline()    # <alpino-sentences>
-            alpinods = xmlstream.read().split('</alpino_ds>')
-            alpinods = [(xml_version + s + '</alpino_ds>').strip() for s in alpinods[:-1]]
+            context = xmlstream.read()
+            # alpinods = xmlstream.read().split('</alpino_ds>')
+            # alpinods = [(xml_version + s + '</alpino_ds>').strip() for s in alpinods[:-1]]
+            alpinods = split_by_tagname(context, 'alpino_ds')
+            alpinods = [xml_version + alp for alp in alpinods]
 
             tabstream.write('<article>\n')
             for tree in alpinods:
-                try:
-                    assert tree.endswith('</alpino_ds>')
-                except AssertionError:
-                    logger.error("\ninput file: {}"
-                                 "\nSentence xml does not start with '<alpino_ds':"
-                                 .format(fname))
-                    continue
-
+                # if article cannot be parsed
+                # record error and skip
                 try:
                     tree = parseString(tree).documentElement
                 except ExpatError:
@@ -98,6 +88,7 @@ def alpino2tab(input_fname, output_fname):
                                  .format(fname, e))
                     continue
 
+                # skip empty nodes
                 if tree.nodeType == Node.TEXT_NODE and tree.data.strip() == '':
                     continue
 
@@ -117,6 +108,10 @@ def alpino2tab(input_fname, output_fname):
                                  .format(fname, e))
             tabstream.write('</article>')
     except IOError as e:
+        logger.error("\ninput file: {}"
+                     "\nOperation failed: {}"
+                     .format(fname, e))
+    except Exception as e:
         logger.error("\ninput file: {}"
                      "\nOperation failed: {}"
                      .format(fname, e))

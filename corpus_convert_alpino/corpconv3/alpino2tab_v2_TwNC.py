@@ -1,17 +1,6 @@
-from __future__ import absolute_import
-
-'''
-Script for converting dependency trees in Alpino XML format to tabular
-format (e.g. the MALT-Tab format).
-'''
-
-__author__ = 'Erwin Marsi <e.c.marsi@uvt.nl>'
-__version__ = '$Id: alpino2tab.py,v 1.9 2006/01/13 10:24:35 erwin Exp $'
-
-
 import os
-import logging
 import codecs
+import logging
 
 from xml.parsers.expat import ExpatError
 from xml.dom.minidom import parseString, Node
@@ -19,13 +8,13 @@ from xml.dom.minidom import parseString, Node
 from .alpino2tabUtils import *
 
 
-logger = logging.getLogger('[alpino2tab:SoNaR]')
+logger = logging.getLogger('[alpino2tab:TwNC]')
 logger.setLevel(logging.INFO)
 
 file_path = os.path.abspath(__file__)
 cur_dir = os.path.dirname(file_path)
 parent_dir = os.path.dirname(cur_dir)
-log_fname = "{}/alpino2tab_SoNaR.log".format(parent_dir)
+log_fname = "{}/alpino2tab_TwNC.log".format(parent_dir)
 
 file_handler = logging.FileHandler(log_fname)
 formatter = logging.Formatter('%(asctime)s %(name)-4s %(levelname)-4s %(message)s')
@@ -37,7 +26,7 @@ options_dict = {
     'all_warns': True,
     'blanks': False,
     'concat_mwu': False,
-    'encoding': 'UTF-8',
+    'encoding': 'latin-1',
     'file': True,
     'link_du': True,
     'mark_mwu_alpino': False,
@@ -69,25 +58,23 @@ options = Options(options_dict)
 def alpino2tab(input_fname, output_fname):
     fname = input_fname.split(os.sep)[-1]
     try:
-        with open(input_fname) as xmlstream, codecs.open(output_fname, 'w', 'latin-1') as tabstream:
+        with codecs.open(input_fname, 'r', options_dict['encoding']) as xmlstream,\
+             codecs.open(output_fname, 'w', options_dict['encoding']) as tabstream:
             xml_version = xmlstream.readline()    # xml version
             xmlstream.readline()    # <alpino-sentences>
-            alpinods = xmlstream.read().split('</alpino_ds>')
-            alpinods = [(xml_version + s + '</alpino_ds>').strip() for s in alpinods[:-1]]
+            context = xmlstream.read()
+            # alpinods = context.split('</alpino_ds>')
+            # alpinods = [(xml_version + s + '</alpino_ds>').strip() for s in alpinods[:-1]]
+            alpinods = split_by_tagname(context, 'alpino_ds')
+            alpinods = [xml_version + alp for alp in alpinods]
 
             tabstream.write('<article>\n')
             for tree in alpinods:
-                try:
-                    assert tree.endswith('</alpino_ds>')
-                except AssertionError:
-                    logger.error("\ninput file: {}"
-                                 "\nSentence xml does not start with '<alpino_ds':"
-                                 .format(fname))
-                    continue
-
+                # if article cannot be parsed
+                # record error and skip
                 try:
                     tree = parseString(tree).documentElement
-                except ExpatError:
+                except ExpatError as e:
                     logger.error("\ninput file: {}"
                                  "\nxml.parsers.expat.ExpatError: not well-formed (invalid token)"
                                  .format(fname))
@@ -98,6 +85,7 @@ def alpino2tab(input_fname, output_fname):
                                  .format(fname, e))
                     continue
 
+                # skip empty nodes
                 if tree.nodeType == Node.TEXT_NODE and tree.data.strip() == '':
                     continue
 
@@ -120,18 +108,19 @@ def alpino2tab(input_fname, output_fname):
         logger.error("\ninput file: {}"
                      "\nOperation failed: {}"
                      .format(fname, e))
+    except Exception as e:
+        logger.error("\ninput file: {}"
+                     "\nOperation failed: {}"
+                     .format(fname, e))
 
 
 def convert(tree, tabstream):
     """
     convert dependency tree in Alpino XML format to tabular format.
     """
-    # dom = parseString(string.join(xmlstream.readlines()))
-
     removeWhitespaceNodes(tree)
     topnode = topNode(tree)
     tokens = getTokens(tree)
-    comment = tree.getElementsByTagName("comment")[0].firstChild.nodeValue[2:21]
 
     removeEmptyNodes(tree)
 
@@ -142,9 +131,31 @@ def convert(tree, tabstream):
 
     index = {}
     createIndex(topnode, index)
+    words = [e.getAttribute('word') for e in index.values()]
+    tokens = [''.join(w.split()) for w in words]
+    '''
+    roots = [e.getAttribute('word') for e in index.values()]
+    if len(words) != len(tokens) or len(roots) != len(tokens):
+        for w, r in zip(words, roots):
+            if w != r:
+                print(w, r)
+        words = [''.join(w.split()) for w in words]
+    '''
 
     reattachPunctuation(topnode, index)
-    tabstream.write('<sentence>\n')
-    tabstream.write('<file-id>'+comment+'</file-id>\n')
-    writeOutput(tokens, index, tabstream)
-    tabstream.write('</sentence>\n')
+    # tabstream.write('<sentence>\n')
+    sent_str = writeOutputNew(tokens, index, tabstream)
+    # tabstream.write('</sentence>\n')
+    sent_str = '<sentence>\n{}\n</sentence>\n'.format(sent_str)
+    tabstream.write(sent_str)
+
+
+def convert_v2(xmlstream, tabstream):
+    """
+    convert dependency tree in Alpino XML format to tabular format.
+    """
+    dom = parseString(string.join(xmlstream.readlines()))
+    removeWhitespaceNodes(dom.documentElement)
+    alpinods = dom.documentElement.childNodes
+    for tree in alpinods:
+        convert(tree, tabstream)

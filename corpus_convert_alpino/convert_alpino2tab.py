@@ -1,7 +1,7 @@
 import os
 
-from corpconv.utils import timeit, list_dir_tree
-from corpconv.baseParser import CorpusParser
+from corpconv3.utils import timeit, list_dir_tree
+from corpconv3.baseParser import CorpusParser
 
 
 ''' Method calling procedure

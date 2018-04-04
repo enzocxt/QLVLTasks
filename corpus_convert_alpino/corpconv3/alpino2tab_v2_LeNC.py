@@ -1,13 +1,5 @@
 from __future__ import absolute_import
 
-'''
-Script for converting dependency trees in Alpino XML format to tabular
-format (e.g. the MALT-Tab format).
-'''
-
-__author__ = 'Erwin Marsi <e.c.marsi@uvt.nl>'
-__version__ = '$Id: alpino2tab.py,v 1.9 2006/01/13 10:24:35 erwin Exp $'
-
 
 import os
 import codecs
@@ -109,7 +101,8 @@ def get_tag(xml_line):
 def alpino2tab(input_fname, output_fname):
     fname = input_fname.split(os.sep)[-1]
     try:
-        with open(input_fname) as xmlstream, codecs.open(output_fname, 'w', 'latin-1') as tabstream:
+        with codecs.open(input_fname, 'r', options_dict['encoding']) as xmlstream,\
+             codecs.open(output_fname, 'w', options_dict['encoding']) as tabstream:
             xml_version = xmlstream.readline().strip()    # xml version
             doctype = xmlstream.readline()
             conv_version = xmlstream.readline()
@@ -120,18 +113,14 @@ def alpino2tab(input_fname, output_fname):
             regex = r'&(?!lt;|gt;|amp;|apos;|quot;)'
             xmlstring = re.sub(regex, '&amp;', xmlstring)
             # xmlstring = escape(xmlstring)
-            articles = xmlstring.split('</xmlfile>')
-            articles = [(xml_version + s + '</xmlfile>').strip() for s in articles[:-1]]
+            # articles = xmlstring.split('</xmlfile>')
+            # articles = [(xml_version + s + '</xmlfile>').strip() for s in articles[:-1]]
+            articles = split_by_tagname(xmlstring, 'xmlfile')
+            articles = [xml_version + art for art in articles]
 
             for art in articles:
-                try:
-                    assert art.endswith('</xmlfile>')
-                except AssertionError:
-                    logger.error("\ninput file: {}"
-                                 "\nArticle xml does not end with '</xmlfile>':"
-                                 .format(fname))
-                    continue
-
+                # if article cannot be parsed
+                # record error and skip
                 try:
                     art = parseString(art)
                 except ExpatError as e:
@@ -144,6 +133,8 @@ def alpino2tab(input_fname, output_fname):
                     # there is only one "<article.published...>" in "<xmlfile...>"
                     art = art.getElementsByTagName("article.published")[0]
                 except Exception as e:
+                    # if occurs with error, then no article in xmlfile element
+                    # then skip this article
                     logger.error("\ninput file: {}"
                                  "\nError: {}"
                                  .format(fname, e))
@@ -228,6 +219,7 @@ def alpino2tab(input_fname, output_fname):
 
                 alpinods = art.getElementsByTagName("alpino_ds")
                 for tree in alpinods:
+                    # skip empty nodes
                     if tree.nodeType == Node.TEXT_NODE and tree.data.strip() == '':
                         continue
 
@@ -276,6 +268,8 @@ def convert(tree, tabstream):
 
     index = {}
     createIndex(topnode, index)
+    words = [e.getAttribute('word') for e in index.values()]
+    tokens = [''.join(w.split()) for w in words]
 
     reattachPunctuation(topnode, index)
     tabstream.write('<sentence>\n')
