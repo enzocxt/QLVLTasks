@@ -88,7 +88,8 @@ def alpino2tab_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None):
         if corpus_name == 'TwNC':
             alpino2tab_TwNC(fname, tmpDIR_dir_proc, output_dir)
         elif corpus_name == 'LeNC':
-            alpino2tab_LeNC(fname, tmpDIR_dir_proc, output_dir)
+            cur_io_paths = (input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc)
+            alpino2tab_LeNC(fname, cur_io_paths)
         elif corpus_name == 'SoNaR':
             cur_io_paths = (input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc)
             alpino2tab_SoNaR(fname, cur_io_paths, meta_dict=meta_dict)
@@ -106,7 +107,11 @@ def alpino2tab_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None):
 def alpino2tab_TwNC(fname, tmpDIR_dir_proc, output_dir):
     input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
     tmp_in_fname = input_fname.split('/')[-1]
-    output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
+    try:
+        output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
+    except Exception as e:
+        logger.error('\ninput file: {}\noutput file: {}'.format(tmp_in_fname, output_fname.replace(output_dir, '...')))
+        logger.error(e)
     try:
         convert_TwNC(input_fname, output_fname)
     except Exception as e:
@@ -117,7 +122,7 @@ def alpino2tab_TwNC(fname, tmpDIR_dir_proc, output_dir):
     os.remove(input_fname)
 
 
-def alpino2tab_LeNC(fname, tmpDIR_dir_proc, output_dir):
+def alpino2tab_LeNC_nosplit(fname, tmpDIR_dir_proc, output_dir):
     input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
     tmp_in_fname = input_fname.split('/')[-1]
     output_fname = FilenameGetter.get_output_fname_LeNC(tmp_in_fname, output_dir)
@@ -132,6 +137,36 @@ def alpino2tab_LeNC(fname, tmpDIR_dir_proc, output_dir):
 
     # remove input file in tmpDIR_dir
     os.remove(input_fname)
+
+
+def alpino2tab_LeNC(fname, io_paths):
+    _input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc = io_paths
+
+    input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
+    tmp_in_fname = input_fname.split('/')[-1]
+    tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
+    output_fname = '{}/{}'.format(tmpOUT_dir_proc, tmp_out_fname)
+    # output_fname = FilenameGetter.get_output_fname_LeNC(tmp_in_fname, output_dir)
+    pid = os.getpid()
+    try:
+        convert_LeNC(input_fname, output_fname)
+    except NegativeHeadError:
+        logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
+        logger.error("Negative value for head")
+    except Exception as e:
+        logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
+        logger.error(e)
+
+    try:
+        Parser.split_LeNC(output_fname, output_dir)
+    except Exception as e:
+        logger.error('\ninput file: {}\noutput file: {} [{}]'.format(input_fname, output_fname, pid))
+        logger.error(e)
+
+    # remove input file in tmpDIR_dir
+    os.remove(input_fname)
+    # remove output file in tmpOUT_dir
+    os.remove(output_fname)
 
 
 def alpino2tab_SoNaR(fname, io_paths, meta_dict=None):

@@ -13,7 +13,7 @@ from .ConverterMulti import LeNCConverterMulti, TwNCConverterMulti, SoNaRConvert
 logger = logging.getLogger('[alpino2tab]')
 
 
-class CorpusParser(object):
+class CorpusHandler(object):
     _mapper = {
         'SoNaR': SoNaRConverter,
         'LeNC': LeNCConverter,

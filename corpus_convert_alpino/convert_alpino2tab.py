@@ -1,7 +1,7 @@
 import os
 
 from corpconv3.utils import timeit, list_dir_tree
-from corpconv3.baseParser import CorpusParser
+from corpconv3.baseHandler import CorpusHandler
 
 
 ''' Method calling procedure
@@ -17,6 +17,8 @@ main_TwNC()
 def main_TwNC():
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
     output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/output"
+    # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/twnc_unknownerr_files"
+    # output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/twnc_unknownerr_files"
 
     # check whether paths exist
     paths = [input_dir, output_dir]
@@ -25,7 +27,7 @@ def main_TwNC():
             raise AttributeError("File or directory not exists: \n{}".format(p))
 
     list_dir_tree(input_dir)
-    corppar = CorpusParser('TwNC', input_dir, output_dir)
+    corppar = CorpusHandler('TwNC', input_dir, output_dir)
     corppar.run_multi()
 
 
@@ -33,6 +35,8 @@ def main_TwNC():
 def main_LeNC():
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/LeNC-alpino"
     output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/output"
+    # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/error_files/lenc/lenc_spliterr_files"
+    # output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/error_files/lenc/lenc_spliterr_files"
 
     # check whether paths exist
     paths = [input_dir, output_dir]
@@ -41,7 +45,7 @@ def main_LeNC():
             raise AttributeError("File or directory not exists: \n{}".format(p))
 
     list_dir_tree(input_dir)
-    corppar = CorpusParser('LeNC', input_dir, output_dir)
+    corppar = CorpusHandler('LeNC', input_dir, output_dir)
     corppar.run_multi()
 
 
@@ -61,12 +65,12 @@ def main_SoNaR():
             raise AttributeError("File or directory not exists: \n{}".format(p))
 
     list_dir_tree(input_dir)
-    corppar = CorpusParser('SoNaR', input_dir, output_dir, meta_files=metadata_files)
+    corppar = CorpusHandler('SoNaR', input_dir, output_dir, meta_files=metadata_files)
     corppar.run_multi()
 
 
 if __name__ == '__main__':
-    # main_TwNC()
+    main_TwNC()
     main_LeNC()
-    # main_SoNaR()
+    main_SoNaR()
 
