@@ -310,9 +310,8 @@ class FilenameGetter(object):
                 try:
                     os.makedirs(path)
                 except OSError as exc:
-                    # if exc.errno != errno.EEXIST:
-                    #    raise
-                    raise exc
+                    if exc.errno != os.errno.EEXIST:
+                        raise exc
 
         return filename
 
@@ -335,11 +334,22 @@ class FilenameGetter(object):
             nation = 'Belgium'
         else:
             nation = 'Other'
-        filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}.conll".format(
-            outdir=output_dir, nation=nation, year=jaar, news=krant,
-            krant=krant, datum=datum)
 
         # recursively create directories if they do not exist
+        steps = [nation, jaar, krant]
+        next_folder = output_dir
+        for step in steps:
+            next_folder = os.path.join(next_folder, step)
+            if not os.path.exists(next_folder):
+                try:
+                    os.makedirs(next_folder)
+                except OSError as e:
+                    if e.errno != os.errno.EEXIST:
+                        raise e
+                except Exception as e:
+                    if not os.path.exists(next_folder):
+                        raise e
+        '''
         folders = filename.split(os.sep)
         for i in range(3, len(folders)):
             path = os.sep.join(folders[:i])
@@ -347,10 +357,11 @@ class FilenameGetter(object):
                 try:
                     os.makedirs(path)
                 except OSError as exc:
-                    # if exc.errno != errno.EEXIST:
-                    #    raise
-                    raise exc
-                except Exception as e:
-                    raise e
+                    if exc.errno != os.errno.EEXIST:
+                        raise exc
+        '''
+        filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}.conll".format(
+                    outdir=output_dir, nation=nation, year=jaar,
+                    news=krant, krant=krant, datum=datum)
 
         return filename

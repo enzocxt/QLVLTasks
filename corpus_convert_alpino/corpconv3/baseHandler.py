@@ -3,8 +3,12 @@ from __future__ import absolute_import
 import os
 import shutil
 import logging
+import multiprocessing as mp
+from tqdm import tqdm
 
 from .logging import create_logger
+from .utils import file_filter
+from .utilsMulti import convert_multi
 from .utilsClass import MetaData
 from .Converter import LeNCConverter, TwNCConverter, SoNaRConverter
 from .ConverterMulti import LeNCConverterMulti, TwNCConverterMulti, SoNaRConverterMulti
@@ -49,6 +53,11 @@ class CorpusHandler(object):
         self.command = command
         self.dtd_fname = dtd_fname
         self.meta_files = meta_files
+        self.meta_data = None
+        if meta_files is not None:
+            self.meta_data = self.read_metadata(corpus_name, meta_files)
+        self.tmpDIR_dir = None
+        self.tmpOUT_dir = None
 
     @property
     def logger(self):
@@ -63,6 +72,14 @@ class CorpusHandler(object):
         See :ref:`logging` for more information.
         """
         return self.logger
+
+    @staticmethod
+    def read_metadata(corpus_name, meta_files=None):
+        if corpus_name != 'SoNaR':
+            return None
+        md = MetaData(meta_files)
+        meta_dict = md.read_metadata()
+        return meta_dict
 
     @classmethod
     def setup_env(cls, output_dir):
@@ -125,30 +142,61 @@ class CorpusHandler(object):
         self.clean_env(tmpDIR_dir, tmpOUT_dir)
 
     def run_multi(self):
-        corpus_name = self.corpus_name
-        input_dir, output_dir = self.input_dir, self.output_dir
-        # command = self.command
-        # dtd_fname, meta_files = self.dtd_fname, self.meta_files
-        meta_files = self.meta_files
 
         # setup environment
-        tmpDIR_dir, tmpOUT_dir = self.setup_env(output_dir)
-
-        # read meta data for corpus SoNaR
-        meta_dict = self.read_metadata(corpus_name, meta_files=meta_files)
+        # self.tmpDIR_dir, self.tmpOUT_dir = self.setup_env(self.output_dir)
 
         # recursively convert corpus files in input directory
-        io_paths = (input_dir, tmpDIR_dir, output_dir, tmpOUT_dir)
-        converter = self._mapper_multi[corpus_name]
-        converter.convert_multi(input_dir, io_paths, meta_dict=meta_dict)
+        # io_paths = (input_dir, tmpDIR_dir, output_dir, tmpOUT_dir)
+        # converter = self._mapper_multi[corpus_name]
+        # converter.convert_multi(input_dir, io_paths, meta_dict=meta_dict)
+        self.deliver_and_run(self.input_dir)
 
         # clean tmp folders
-        self.clean_env(tmpDIR_dir, tmpOUT_dir)
+        # self.clean_env(self.tmpDIR_dir, self.tmpOUT_dir)
 
-    @staticmethod
-    def read_metadata(corpus_name, meta_files=None):
-        if corpus_name != 'SoNaR':
-            return None
-        md = MetaData(meta_files)
-        meta_dict = md.read_metadata()
-        return meta_dict
+    def deliver_and_run(self, cur_input_dir, pg_leave=True):
+        """
+        recursively go to every folder and divide files for parallel methods
+        """
+        input_root = self.input_dir
+        level = cur_input_dir.replace(input_root, '').count(os.sep)
+        indent = ' ' * 2 * level
+        files = os.listdir(cur_input_dir)
+        dirs, files = file_filter(cur_input_dir, files)
+
+        # call multiprocessing function for files
+        if len(files) > 0:
+            self.call_multi(cur_input_dir, files)
+
+        # recursively call self for dirs
+        dirs = tqdm(sorted(dirs), unit='dir', desc='{}{}'.format(indent, cur_input_dir.split('/')[-1]), leave=pg_leave)
+        for d in dirs:
+            abs_dir = '{path}{sep}{dir}'.format(path=cur_input_dir, sep=os.sep, dir=d)
+            self.deliver_and_run(abs_dir, pg_leave=pg_leave)
+
+    def call_multi(self, input_dir, files):
+        input_root = self.input_dir
+        level = input_dir.replace(input_root, '').count(os.sep)
+        indent = ' ' * 2 * level
+        subindent = ' ' * 2 * level
+
+        num_cores = mp.cpu_count() - 1
+        num_files = len(files)
+        data_group = [[] for _ in range(num_cores)]
+        for i in range(num_files):
+            idx = i % num_cores
+            abs_fname = '{path}{sep}{fname}'.format(path=input_dir, sep=os.sep, fname=files[i])
+            data_group[idx].append(abs_fname)
+
+        io_paths = (input_dir, self.output_dir)
+        pool = mp.Pool(processes=num_cores)
+        for i in range(num_cores):
+            args = (self.corpus_name, data_group[i], io_paths,)
+            kwds = {
+                'indent': subindent,
+                'meta_dict': self.meta_data,
+            }
+            pool.apply_async(convert_multi, args=args, kwds=kwds)
+        pool.close()
+        pool.join()
