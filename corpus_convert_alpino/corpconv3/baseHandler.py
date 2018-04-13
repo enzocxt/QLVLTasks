@@ -189,6 +189,9 @@ class CorpusHandler(object):
             abs_fname = '{path}{sep}{fname}'.format(path=input_dir, sep=os.sep, fname=files[i])
             data_group[idx].append(abs_fname)
 
+        # for experiment, only keep one first file in every group
+        # data_group = [g[:1] for g in data_group]
+
         io_paths = (input_dir, self.output_dir)
         pool = mp.Pool(processes=num_cores)
         for i in range(num_cores):

@@ -318,7 +318,12 @@ class FilenameGetter(object):
     @classmethod
     def get_output_fname_TwNC(cls, file_id, output_dir):
         # 'nrc20040408.alpino.xml'
-        name = file_id.split('.')[0]
+        # volkskrant20040227_up.artikelen-A.alpino.xml
+        if '.alpino.xml' not in file_id:
+            # must contain '.alpino.xml'
+            raise ValueError("Incorrect file name.")
+        name = file_id.replace('.alpino.xml', '')
+
         idx = 0
         for i, c in enumerate(name):
             if c.isdigit():
@@ -335,6 +340,7 @@ class FilenameGetter(object):
         else:
             nation = 'Other'
 
+        '''
         # recursively create directories if they do not exist
         steps = [nation, jaar, krant]
         next_folder = output_dir
@@ -350,18 +356,10 @@ class FilenameGetter(object):
                     if not os.path.exists(next_folder):
                         raise e
         '''
-        folders = filename.split(os.sep)
-        for i in range(3, len(folders)):
-            path = os.sep.join(folders[:i])
-            if not os.path.exists(path):
-                try:
-                    os.makedirs(path)
-                except OSError as exc:
-                    if exc.errno != os.errno.EEXIST:
-                        raise exc
-        '''
-        filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}.conll".format(
-                    outdir=output_dir, nation=nation, year=jaar,
-                    news=krant, krant=krant, datum=datum)
+        ppath = "{outdir}/{nation}/{year}/{news}".format(
+                 outdir=output_dir, nation=nation, year=jaar, news=krant)
+        os.makedirs(ppath, exist_ok=True)
+        filename = "{ppath}/{krant}_{datum}.conll".format(
+                    ppath=ppath, krant=krant, datum=datum)
 
         return filename

@@ -120,27 +120,22 @@ def convert(tree, tabstream):
     """
     removeWhitespaceNodes(tree)
     topnode = topNode(tree)
-    tokens = getTokens(tree)
+    uncat_tokens = getTokens(tree)
 
     removeEmptyNodes(tree)
 
     if options.concat_mwu:
-        concatMultiWordUnits(tree, tokens)
+        concatMultiWordUnits(tree, uncat_tokens)
 
     substituteHeadForPhrase(topnode)
 
     index = {}
     createIndex(topnode, index)
     words = [e.getAttribute('word') for e in index.values()]
-    tokens = [''.join(w.split()) for w in words]
-    '''
-    roots = [e.getAttribute('word') for e in index.values()]
-    if len(words) != len(tokens) or len(roots) != len(tokens):
-        for w, r in zip(words, roots):
-            if w != r:
-                print(w, r)
-        words = [''.join(w.split()) for w in words]
-    '''
+    # words = [''.join(w.split()) for w in words]
+    words = set(words)
+    cat_words = words - set(uncat_tokens)
+    tokens = concat_tokens(uncat_tokens, cat_words)
 
     reattachPunctuation(topnode, index)
     # tabstream.write('<sentence>\n')
@@ -159,3 +154,31 @@ def convert_v2(xmlstream, tabstream):
     alpinods = dom.documentElement.childNodes
     for tree in alpinods:
         convert(tree, tabstream)
+
+
+def concat_tokens(uncat_tokens, cat_words):
+    tokens = []
+    i = 0
+    while i < len(uncat_tokens):
+        tok = uncat_tokens[i]
+        if tok not in cat_words:
+            tokens.append(tok)
+        else:
+            flag = True
+            for cw in cat_words:
+                if not cw.startswith(tok):
+                    continue
+                ws = cw.split()
+                for k in range(len(ws)):
+                    if i+k >= len(uncat_tokens) or uncat_tokens[i+k] != ws[k]:
+                        flag = False
+                        break
+                if flag:
+                    cat_tok = ''.join(ws)
+                    break
+            if flag:
+                tokens.append(cat_tok)
+            else:
+                raise ValueError("Tokens in sentence do not match words in xml attributes!!!")
+        i += 1
+    return tokens
