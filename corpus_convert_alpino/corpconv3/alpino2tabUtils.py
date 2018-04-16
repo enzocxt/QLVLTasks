@@ -429,6 +429,74 @@ def createIndex(parent, index=None):
         createIndex(child, index)
 
 
+def writeOutput(index, tabstream=sys.stdout):
+
+    size = len(index.keys())
+    output = []
+    for i in range(size):
+        word = index[i].getAttribute('word')
+        split_wrds = word.split()
+        if len(split_wrds) >= 2:
+            word = ''.join(split_wrds)
+        word_count = ''
+        if options.word_count:
+            if options.blanks:
+                word_count = '{:<4}'.format(i + 1)
+            else:
+                word_count = '{}\t'.format(i + 1)
+
+        if options.blanks:
+            word_str = '{:<20}'.format(word)
+        else:
+            word_str = '{}\t'.format(word)
+
+        root_str = ''
+        if options.root:
+            root = index[i].getAttribute('root')    # .replace(' ', '_')
+            split_lems = root.split()
+            if len(split_lems) >= 2:
+                root = '_'.join(split_lems)
+            if options.blanks:
+                root_str = '{:<20}'.format(root)
+            else:
+                root_str = '{}\t'.format(root)
+
+        if options.blanks:
+            pos_str = '{:<10}'.format(index[i].getAttribute('pos'))
+        else:
+            pos_str = '{}\t'.format(index[i].getAttribute('pos'))
+
+        rel = index[i].getAttribute('rel')
+
+        if rel == '--':
+            rel = 'ROOT'
+            head = 0
+        else:
+            head = int(index[i].parentNode.getAttribute('begin')) + 1
+
+        if options.blanks:
+            rel_str = '{:<4}{:<10}'.format(head, rel)
+        else:
+            rel_str = '{}\t{}'.format(head, rel)
+
+        lasttwo = ''
+        if options.projective:
+            if options.blanks:
+                lasttwo = '  _  _'
+            else:
+                lasttwo = '\t_\t_'
+
+        line = (word_count + word_str + root_str +
+                pos_str + rel_str + lasttwo)
+        output.append(line)
+
+    if options.terminator:
+        # tabstream.write('%s' % options.terminator)
+        output.append('{}'.format(options.terminator))
+
+    return '\n'.join(output)
+
+
 def writeOutputNew(tokens, index, tabstream=sys.stdout):
 
     output = []
@@ -515,7 +583,7 @@ def writeOutputNew(tokens, index, tabstream=sys.stdout):
     return '\n'.join(output)
 
 
-def writeOutput(tokens, index, tabstream=sys.stdout):
+def writeOutputOriginal(tokens, index, tabstream=sys.stdout):
     """
     write output in tabular form
     """

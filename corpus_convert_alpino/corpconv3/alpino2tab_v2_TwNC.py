@@ -104,16 +104,19 @@ def convert(tree, tabstream):
 
     index = {}
     createIndex(topnode, index)
+    '''
     words = [e.getAttribute('word') for e in index.values()]
     # words = [''.join(w.split()) for w in words]
     if len(tokens) != len(words):
         tokens = concat_tokens(tokens, set(words))
         if len(tokens) != len(words):
             raise ValueError("Tokens in sentence do not match words in xml attributes!!!")
+    '''
 
     reattachPunctuation(topnode, index)
     # tabstream.write('<sentence>\n')
-    sent_str = writeOutputNew(tokens, index, tabstream)
+    sent_str = writeOutput(index, tabstream)
+    # sent_str = writeOutputNew(tokens, index, tabstream)
     # tabstream.write('</sentence>\n')
     sent_str = '<sentence>\n{}\n</sentence>\n'.format(sent_str)
     tabstream.write(sent_str)
