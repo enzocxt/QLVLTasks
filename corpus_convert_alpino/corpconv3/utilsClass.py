@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import sys
 import codecs
 import html
 from collections import defaultdict
@@ -298,21 +299,30 @@ class FilenameGetter(object):
             nation = 'Belgium'
         else:
             nation = 'Other'
+        ppath = "{outdir}/{nation}/{year}/{news}".format(
+                 outdir=output_dir, nation=nation, year=jaar, news=krant)
+
+        if sys.version_info[0] < 3.2:
+            # recursively create directories if they do not exist
+            steps = [nation, jaar, krant]
+            next_folder = output_dir
+            for step in steps:
+                next_folder = os.path.join(next_folder, step)
+                if not os.path.exists(next_folder):
+                    try:
+                        os.makedirs(next_folder)
+                    except OSError as e:
+                        if e.errno != os.errno.EEXIST:
+                            raise e
+                    except Exception as e:
+                        if not os.path.exists(next_folder):
+                            raise e
+        else:
+            os.makedirs(ppath, exist_ok=True)
+
         filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}_{id}.conll".format(
             outdir=output_dir, nation=nation, year=jaar, news=krant,
             krant=krant, datum=datum, id=id)
-
-        # recursively create directories if they do not exist
-        folders = filename.split('/')
-        for i in range(3, len(folders)):
-            path = '/'.join(folders[:i])
-            if not os.path.exists(path):
-                try:
-                    os.makedirs(path)
-                except OSError as exc:
-                    if exc.errno != os.errno.EEXIST:
-                        raise exc
-
         return filename
 
     @classmethod
@@ -339,27 +349,27 @@ class FilenameGetter(object):
             nation = 'Belgium'
         else:
             nation = 'Other'
-
-        '''
-        # recursively create directories if they do not exist
-        steps = [nation, jaar, krant]
-        next_folder = output_dir
-        for step in steps:
-            next_folder = os.path.join(next_folder, step)
-            if not os.path.exists(next_folder):
-                try:
-                    os.makedirs(next_folder)
-                except OSError as e:
-                    if e.errno != os.errno.EEXIST:
-                        raise e
-                except Exception as e:
-                    if not os.path.exists(next_folder):
-                        raise e
-        '''
         ppath = "{outdir}/{nation}/{year}/{news}".format(
                  outdir=output_dir, nation=nation, year=jaar, news=krant)
-        os.makedirs(ppath, exist_ok=True)
+
+        if sys.version_info[0] < 3.2:
+            # recursively create directories if they do not exist
+            steps = [nation, jaar, krant]
+            next_folder = output_dir
+            for step in steps:
+                next_folder = os.path.join(next_folder, step)
+                if not os.path.exists(next_folder):
+                    try:
+                        os.makedirs(next_folder)
+                    except OSError as e:
+                        if e.errno != os.errno.EEXIST:
+                            raise e
+                    except Exception as e:
+                        if not os.path.exists(next_folder):
+                            raise e
+        else:
+            os.makedirs(ppath, exist_ok=True)
+
         filename = "{ppath}/{krant}_{datum}.conll".format(
                     ppath=ppath, krant=krant, datum=datum)
-
         return filename

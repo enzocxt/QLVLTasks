@@ -12,6 +12,9 @@ corpus_convert/*.xq
 
 # alpino2tab
 corpus_convert_alpino/output*
+corpus_convert_alpino/error*
+corpus_convert_alpino/records*
+corpus_convert_alpino/output_records*
 corpus_convert_alpino/*.txt
 corpus_convert_alpino/*.log
 corpus_convert_alpino/test*

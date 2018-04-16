@@ -5,6 +5,7 @@ import os
 import codecs
 import logging
 import re
+import traceback
 
 from xml.parsers.expat import ExpatError
 from xml.dom.minidom import parseString, Node
@@ -112,32 +113,17 @@ def alpino2tab(input_fname, output_fname):
             xmlstring = xmlstream.read()
             regex = r'&(?!lt;|gt;|amp;|apos;|quot;)'
             xmlstring = re.sub(regex, '&amp;', xmlstring)
-            # xmlstring = escape(xmlstring)
-            # articles = xmlstring.split('</xmlfile>')
-            # articles = [(xml_version + s + '</xmlfile>').strip() for s in articles[:-1]]
             articles = split_by_tagname(xmlstring, 'xmlfile')
             articles = [xml_version + art for art in articles]
 
             for art in articles:
                 # if article cannot be parsed
                 # record error and skip
-                try:
-                    art = parseString(art)
-                except ExpatError as e:
-                    logger.error("\ninput file: {}"
-                                 "\nxml.parsers.expat.ExpatError: not well-formed (invalid token)"
-                                 .format(fname))
+                art = parse_string(art, fname)
+                if art is False:
                     continue
 
-                try:
-                    # there is only one "<article.published...>" in "<xmlfile...>"
-                    art = art.getElementsByTagName("article.published")[0]
-                except Exception as e:
-                    # if occurs with error, then no article in xmlfile element
-                    # then skip this article
-                    logger.error("\ninput file: {}"
-                                 "\nError: {}"
-                                 .format(fname, e))
+                art = get_article(art, fname)
 
                 tabstream.write('<article>\n')
                 topic = ''
@@ -222,21 +208,8 @@ def alpino2tab(input_fname, output_fname):
                     # skip empty nodes
                     if tree.nodeType == Node.TEXT_NODE and tree.data.strip() == '':
                         continue
+                    convert_log(tree, tabstream, fname)
 
-                    try:
-                        convert(tree, tabstream)
-                    except NegativeHeadError as e:
-                        logger.error("\ninput file: {}"
-                                     "\nNegativeHeadError: {}"
-                                     .format(fname, e))
-                    except KeyError:
-                        logger.error("\ninput file: {}"
-                                     "\nKeyError: writeOutput() for sentence"
-                                     .format(fname))
-                    except Exception as e:
-                        logger.error("\ninput file: {}"
-                                     "\nError: {}"
-                                     .format(fname, e))
                 tabstream.write('</article>')
     except IOError as e:
         logger.error("\ninput file: {}"
@@ -269,9 +242,68 @@ def convert(tree, tabstream):
     index = {}
     createIndex(topnode, index)
     words = [e.getAttribute('word') for e in index.values()]
-    tokens = [''.join(w.split()) for w in words]
+    if len(tokens) != len(words):
+        # print(tokens)
+        # print(words)
+        tokens = concat_tokens(tokens, set(words))
+        # print(tokens)
 
     reattachPunctuation(topnode, index)
     tabstream.write('<sentence>\n')
     writeOutput(tokens, index, tabstream)
     tabstream.write('</sentence>\n')
+    # tokens do not match words
+    # the xml element may be parsed incorrectly
+    # after process this tree, record this error in log
+    if len(tokens) != len(words):
+        raise ValueError("Tokens in sentence do not match words in xml attributes!!!")
+
+
+def convert_log(tree, tabstream, fname):
+    try:
+        convert(tree, tabstream)
+    except NegativeHeadError as e:
+        logger.error("\n[alpino2tab:convert_log()] input file: {}"
+                     "\nNegativeHeadError: {}"
+                     .format(fname, e))
+    except KeyError:
+        logger.error("\n[alpino2tab:convert_log()] input file: {}"
+                     "\nKeyError: writeOutput() for sentence"
+                     .format(fname))
+    except Exception as e:
+        # traceback.print_exc()
+        logger.error("\n[alpino2tab:convert_log()] input file: {}"
+                     "\nError: {}"
+                     .format(fname, e))
+
+
+def parse_string(tree, fname):
+    # if article cannot be parsed
+    # record error and skip
+    try:
+        tree = parseString(tree).documentElement
+    except ExpatError as e:
+        logger.error("\n[alpino2tab:parse_string()] input file: {}"
+                     "\nxml.parsers.expat.ExpatError: not well-formed (invalid token)"
+                     .format(fname))
+        return False
+    except Exception as e:
+        logger.error("\n[alpino2tab:parse_string()] input file: {}"
+                     "\nError: cannot parse xml sentence\n{}"
+                     .format(fname, e))
+        return False
+
+    return tree
+
+
+def get_article(art, fname):
+    try:
+        # there is only one "<article.published...>" in "<xmlfile...>"
+        art = art.getElementsByTagName("article.published")[0]
+    except Exception as e:
+        # if occurs with error, then no article in xmlfile element
+        # then skip this article
+        logger.error("\n[alpino2tab:get_article()] input file: {}"
+                     "\nError: {}"
+                     .format(fname, e))
+    return art
