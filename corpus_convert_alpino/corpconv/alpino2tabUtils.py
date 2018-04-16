@@ -1,10 +1,8 @@
 from __future__ import absolute_import
 
 import sys
-import string
-import os.path
-import optparse
 import codecs
+from collections import defaultdict
 from xml.dom.minidom import parseString, Node
 
 
@@ -12,7 +10,8 @@ options_dict = {
     'all_warns': True,
     'blanks': False,
     'concat_mwu': True,
-    'encoding': 'latin-1',
+    # not used in utils
+    # 'encoding': 'latin-1',
     'file': True,
     'link_du': True,
     'mark_mwu_alpino': False,
@@ -28,7 +27,7 @@ class Options(object):
         self.all_warns = options_dict['all_warns']
         self.blanks = options_dict['blanks']
         self.concat_mwu = options_dict['concat_mwu']
-        self.encoding = options_dict['encoding']
+        # self.encoding = options_dict['encoding']
         self.file = options_dict['file']
         self.link_du = options_dict['link_du']
         self.mark_mwu_alpino = options_dict['mark_mwu_alpino']
@@ -49,6 +48,105 @@ class NegativeHeadError(ConversionError):
     pass
 
 
+def concat_tokens(uncat_tokens, words):
+    """
+    concatenate tokens
+    :param uncat_tokens: original tokens split from sentence
+    :param words: a set of words got from word attributes
+    :return: concatenated tokens
+    """
+    common = words.intersection(set(uncat_tokens))
+    cat_words = words - common
+    cat_map = defaultdict(list)
+    for wrd in cat_words:
+        split_wrds = wrd.split()
+        if len(split_wrds) == 0:
+            # there is only whitespace in this wrd
+            continue
+        fst_tok = split_wrds[0]
+        cat_map[fst_tok].append(wrd)
+
+    tokens = []
+    num_tok = len(uncat_tokens)
+    i = 0
+    while i < num_tok:
+        tok = uncat_tokens[i]
+        if tok not in cat_map:
+            # if tok not in cat_map and the xml element is correct
+            # tok should be in common
+            assert(tok in common)
+            tokens.append(tok)
+            i += 1
+        else:
+            cat_wrd_list = cat_map[tok]
+            # in most cases, there is only one in cat_wrd_list
+            found = False
+            for cat_wrd in cat_wrd_list:
+                split_wrds = cat_wrd.split()
+                k = len(split_wrds)
+                if i + k > num_tok:
+                    continue
+                # cat_tok for checking word, which has whitespace letter in it
+                eql = isEqual(uncat_tokens[i:i+k], split_wrds)
+                # the whitespace in cat_wrd would be '\xa0', '\x85',...
+                if eql:
+                    # cat_tok that needs to be concatenated, without space
+                    cat_tok = ''.join(uncat_tokens[i:i+k])
+                    tokens.append(cat_tok)
+                    i += k
+                    found = True
+                    break
+            # if tok in cat_map, but cannot find a cat_wrd matching this tok
+            # then: (1) this tok is an alone token
+            #       (2) there is an error between tokens and words
+            if not found:
+                if tok in common:
+                    tokens.append(tok)
+                    i += 1
+                else:
+                    raise ValueError("Tokens in sentence do not match words in xml attributes")
+
+    # assert len(tokens) == len(words)
+    return tokens
+
+
+def isEqual(tokens, words):
+    """
+    check if a list of tokens is equal to a list words
+    which means that every corresponding token and word is equal
+    """
+    if len(tokens) != len(words):
+        return False
+    for tok, wrd in zip(tokens, words):
+        if tok != wrd:
+            return False
+    return True
+
+
+def split_by_tagname(text, tagname):
+    """
+    split the xml text by tagname
+    """
+    tags = []
+    start = '<{}'.format(tagname)   # start tag should not include '>'
+    end = '</{}>'.format(tagname)
+    ls, le = len(start), len(end)
+    size = len(text)
+    i = 0
+    while True:
+        idx_start = text.find(start, i)
+        idx_end = text.find(end, idx_start)
+        if idx_start < 0 or idx_end < 0:
+            # tag not found
+            break
+        tags.append(text[idx_start:(idx_end + le)])
+        i = idx_end + le
+        if i >= size:
+            break
+
+    return tags
+
+
 def removeWhitespaceNodes(node):
     """
     remove the empty text nodes caused white space(indenting)
@@ -61,10 +159,10 @@ def removeWhitespaceNodes(node):
             child.unlink()
         else:
             removeWhitespaceNodes(child)
-            
+
 
 def removeEmptyNodes(node):
-    """ 
+    """
     remove empty nodes (traces) and correct 'begin' and/or 'end'
     attributes of its parent
     """
@@ -82,7 +180,7 @@ def removeEmptyNodes(node):
             child.unlink()
         else:
             removeEmptyNodes(child)
-            
+
     if node.hasChildNodes():
         node.setAttribute('begin', node.firstChild.getAttribute('begin'))
         node.setAttribute('end', node.lastChild.getAttribute('end'))
@@ -90,7 +188,7 @@ def removeEmptyNodes(node):
 
 def reattachPunctuation(topnode, index):
     """
-    detaches a punctuation symbol from the top node and reattaches it 
+    detaches a punctuation symbol from the top node and reattaches it
     to the first non-punctation token preceding it
     """
     '''
@@ -112,7 +210,7 @@ def reattachPunctuation(topnode, index):
             # search further to the left as long as were still on a punctuation token
             while i >= 0 and index[i].getAttribute('pos') == 'punct':
                 i -= 1
-            # unless we fell off the start of the sentence, 
+            # unless we fell off the start of the sentence,
             # meaning this was sentence-initial punctuation,
             # reattach the child
             if i >= 0:
@@ -139,7 +237,17 @@ def getTokens(dom):
     # the sentence element has only one child node which is a text node
     # the xml string of this text node is actually the sentence text
     # the data of it is the string of this sentence
-    sentence = dom.getElementsByTagName("sentence")[0].childNodes[0].data
+
+    # sentence = dom.getElementsByTagName("sentence")[0].childNodes[0].data
+
+    sentence = dom.getElementsByTagName('sentence')
+    if len(sentence) == 0:
+        return []
+    sentence = sentence[0].childNodes
+    if len(sentence) == 0:
+        return []
+    sentence = sentence[0].data
+
     return sentence.split()
 
 
@@ -153,11 +261,11 @@ def getFileId(dom):
 
 def concatMultiWordUnits(dom, tokens):
     """
-    removes the child nodes from multi word units, 
+    removes the child nodes from multi word units,
     and concatenates the corresponding words
     """
     nodes = dom.getElementsByTagName('node')
-    
+
     for node in nodes:
         if node.getAttribute('cat') != 'mwu':
             continue
@@ -228,7 +336,7 @@ def substituteHeadForPhrase(parent):
             #*	child.unlink()
             #* else:
             substituteHeadForPhrase(child)
-        
+
         # don't bother to find a head for top
         if parent.getAttribute('cat') == 'top':
             return
@@ -246,18 +354,18 @@ def substituteHeadForPhrase(parent):
         parent.setAttribute('end', head.getAttribute('end'))
         parent.setAttribute('pos', head.getAttribute('pos'))
         parent.setAttribute('root', head.getAttribute('root'))
-        parent.setAttribute('word', head.getAttribute('word'))     
-        parent.removeAttribute('cat')  
+        parent.setAttribute('word', head.getAttribute('word'))
+        parent.removeAttribute('cat')
 
         if head.hasChildNodes():
             # head child is a phrase such as a hd/mwu or nucl/smain,
             # so we move he head's children to the head's parent
             # before removing the child
             for headchild in list(head.childNodes):
-                parent.appendChild(head.removeChild(headchild)) 
+                parent.appendChild(head.removeChild(headchild))
 
-        parent.removeChild(head)   
-        
+        parent.removeChild(head)
+
 
 def headChild(parent):
     """
@@ -271,8 +379,8 @@ def headChild(parent):
         # or embedded clause ('cp','oti','ti', or 'ahi')
         if child_rel in ('hd', 'whd', 'rhd', 'crd', 'cmp'):
             return child
-            
-        # - du (discourse unit): prefer dlink, take nucl otherwise 
+
+        # - du (discourse unit): prefer dlink, take nucl otherwise
         # (see below for dp)
         if par_cat == 'du' and child_rel == ('dlink', 'nucl'):
             return child
@@ -298,60 +406,52 @@ def headChild(parent):
 
 def createIndex(parent, index=None):
     """
-    return a dict mapping token positions to nodes 
+    return a dict mapping token positions to nodes
     """
     # since we're traversing top down,
     # don't bother testing if this is a leaf node
     if parent.getAttribute('word'):
         index[int(parent.getAttribute('begin'))] = parent
-            
+
     for child in parent.childNodes:
         createIndex(child, index)
 
 
-def writeOutputNew(tokens, index, tabstream=sys.stdout):
+def writeOutput(index):
 
+    size = len(index.keys())
     output = []
-    for i, word in enumerate(tokens):
+    for i in range(size):
+        word = index[i].getAttribute('word')
+        split_wrds = word.split()
+        if len(split_wrds) >= 2:
+            word = ''.join(split_wrds)
         word_count = ''
         if options.word_count:
             if options.blanks:
-                # tabstream.write('%-4d' % (i + 1))
-                # output.append('{:<4}'.format(i + 1))
                 word_count = '{:<4}'.format(i + 1)
             else:
-                # tabstream.write('%d\t' % (i + 1))
-                # output.append('{}\t'.format(i + 1))
                 word_count = '{}\t'.format(i + 1)
 
         if options.blanks:
-            # tabstream.write('%-20s  ' % word)
-            # output.append('{:<20}'.format(word))
             word_str = '{:<20}'.format(word)
         else:
-            # tabstream.write('%s\t' % word)
-            # output.append('{}\t'.format(word))
             word_str = '{}\t'.format(word)
 
         root_str = ''
         if options.root:
-            root = index[i].getAttribute('root').replace(' ', '_')
+            root = index[i].getAttribute('root')    # .replace(' ', '_')
+            split_lems = root.split()
+            if len(split_lems) >= 2:
+                root = '_'.join(split_lems)
             if options.blanks:
-                # tabstream.write('%-20s  ' % root)
-                # output.append('{:<20}'.format(root))
                 root_str = '{:<20}'.format(root)
             else:
-                # tabstream.write('%s\t' % root)
-                # output.append('{}\t'.format(root))
                 root_str = '{}\t'.format(root)
 
         if options.blanks:
-            # tabstream.write('%-10s  ' % index[i].getAttribute('pos'))
-            # output.append('{:<10}'.format(index[i].getAttribute('pos')))
             pos_str = '{:<10}'.format(index[i].getAttribute('pos'))
         else:
-            # tabstream.write('%s\t' % index[i].getAttribute('pos'))
-            # output.append('{}\t'.format(index[i].getAttribute('pos')))
             pos_str = '{}\t'.format(index[i].getAttribute('pos'))
 
         rel = index[i].getAttribute('rel')
@@ -363,39 +463,28 @@ def writeOutputNew(tokens, index, tabstream=sys.stdout):
             head = int(index[i].parentNode.getAttribute('begin')) + 1
 
         if options.blanks:
-            # tabstream.write('%-4d%-10s  ' % (head, rel))
-            # output.append('{:<4}{:<10}'.format(head, rel))
             rel_str = '{:<4}{:<10}'.format(head, rel)
         else:
-            # tabstream.write('%d\t%s' % (head, rel))
-            # output.append('{}\t{}'.format(head, rel))
             rel_str = '{}\t{}'.format(head, rel)
 
         lasttwo = ''
         if options.projective:
             if options.blanks:
-                # tabstream.write('  _  _')
-                # output.append('  _  _')
                 lasttwo = '  _  _'
             else:
-                # tabstream.write('\t_\t_')
-                # output.append('\t_\t_')
                 lasttwo = '\t_\t_'
 
-        # tabstream.write('\n')
-        # output.append('\n')
         line = (word_count + word_str + root_str +
                 pos_str + rel_str + lasttwo)
         output.append(line)
 
     if options.terminator:
-        # tabstream.write('%s' % options.terminator)
         output.append('{}'.format(options.terminator))
 
     return '\n'.join(output)
 
 
-def writeOutput(tokens, index, tabstream=sys.stdout):
+def writeOutputOriginal(tokens, index, tabstream=sys.stdout):
     """
     write output in tabular form
     """
@@ -409,7 +498,7 @@ def writeOutput(tokens, index, tabstream=sys.stdout):
                 tabstream.write('%-4d' % (i + 1))
             else:
                 tabstream.write('%d\t' % (i + 1))
-        
+
         if options.blanks:
             tabstream.write('%-20s  ' % word)
         else:
@@ -426,7 +515,7 @@ def writeOutput(tokens, index, tabstream=sys.stdout):
             tabstream.write('%-10s  ' % index[i].getAttribute('pos'))
         else:
             tabstream.write('%s\t' % index[i].getAttribute('pos'))
-        
+
         rel = index[i].getAttribute('rel')
 
         if rel == '--':
@@ -434,23 +523,23 @@ def writeOutput(tokens, index, tabstream=sys.stdout):
             head = 0
         else:
             head = int(index[i].parentNode.getAttribute('begin')) + 1
-            
+
         if options.blanks:
             tabstream.write('%-4d%-10s  ' % (head, rel))
         else:
             tabstream.write('%d\t%s' % (head, rel))
-        
+
         if options.projective:
             if options.blanks:
                 tabstream.write('  _  _')
             else:
                 tabstream.write('\t_\t_')
-            
+
         tabstream.write('\n')
-        
+
     if options.terminator:
         tabstream.write('%s' % options.terminator)
-    
+
 
 def printIndices(dom, tokens):
     # a debug function
@@ -464,121 +553,3 @@ def printIndices(dom, tokens):
                    node.getAttribute('pos'),
                    node.getAttribute('word'),
                    tokens[int(begin):int(end)]))
-
-
-'''
-# main stuff    
-
-usage = \
-"""
-    %prog [options] FILES
-
-purpose:
-    converts dependency trees in Alpino XML format to tabular format
-
-args:
-    FILES              dependency trees in Alpino XML format"""
-
-parser = optparse.OptionParser(usage, version=__version__)
-
-parser.add_option('-a', '--all-warnings',
-                  dest='all_warns',
-                  action='store_true',
-                  default=False,
-                  help='also show warnings about mwu and cnj')
-
-parser.add_option('-b', '--blanks',
-                  dest='blanks',
-                  action='store_true',
-                  default=False,
-                  help='use variable number of blanks as column separator (default is tab)')
-
-parser.add_option('-c', '--concat-mwu',
-                  dest='concat_mwu',
-                  action='store_true',
-                  default=False,
-                  help='concatenate the parts of a multi-word unit')
-
-parser.add_option('-e', '--encoding',
-                  dest='encoding', 
-                  metavar='STRING', 
-                  default='utf-8',
-                  help="output character encoding (default is utf-8)")
-
-parser.add_option('-f', '--file',
-                  dest='file',
-                  action='store_true',
-                  default=False,
-                  help='write output to file, replacing .xml by .tab')
-
-parser.add_option('-l', '--link-du',
-                  dest='link_du',
-                  action='store_true',
-                  default=False,
-                  help='force linking of discourse units')
-
-# added by Barbara, January 2010
-parser.add_option('-m', '--mark-mwu-alpino',
-                  dest='mark_mwu_alpino',
-                  action='store_true',
-                  default=False,
-                  help='mark mwu as [ @mwu ] instead of underscore (used by Alpino)')
-
-parser.add_option('-p', '--projective',
-                  dest='projective',
-                  action='store_true',
-                  default=False,
-                  help='include dummy columns for projective head and relation in output')
-
-parser.add_option('-r', '--root',
-                  dest='root',
-                  action='store_true',
-                  default=False,
-                  help='include root (lemma) column in output')
-
-parser.add_option('-t', '--terminator',
-                  dest='terminator', 
-                  metavar='STRING', 
-                  default='',
-                  help="terminator at end of table (default is '')")
-
-parser.add_option('-w', '--word-count',
-                  dest='word_count',
-                  action='store_true',
-                  default=False,
-                  help='include word count column in output')
-
-
-(options, args) = parser.parse_args()
-
-
-# annoying: -t "\n" is stored by options parser as "\\n"
-if options.terminator:
-    options.terminator = options.terminator.replace('\\n', '\n')
-
-if not args:
-    sys.stderr.write('Error: incorrect number of arguments\n')
-else:
-    for xmlfn in args:
-        try:
-            if options.file:
-                tabfn = os.path.basename(xmlfn).replace('.xml','.conll')
-                print >>sys.stderr, 'converting %s to %s' % (xmlfn, tabfn)	    
-                convert(open(xmlfn), codecs.open(tabfn, 'w', options.encoding))
-            else:
-                print >>sys.stderr, 'converting', xmlfn	    
-                convert(open(xmlfn), codecs.EncodedFile(sys.stdout, options.encoding))
-        except NegativeHeadError:
-            print >>sys.stderr, 'ERROR: negative value for head. Skipping input file', xmlfn
-
-#options.word_count = True
-#options.terminator = ''
-#options.projective = True
-#options.blanks = False
-#options.root = True
-#options.file = True
-#options.encoding = 'latin1'
-#options.mark_mwu_alpino = False
-#options.concat_mwu = True
-#options.link_du = True
-'''

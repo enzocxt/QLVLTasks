@@ -4,11 +4,28 @@ import os
 import logging
 import functools
 import time
+import traceback
 import codecs
 import shutil
 
 
 logger = logging.getLogger('[alpino2tab]')
+
+
+def trace(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        indent = ' ' * len(traceback.extract_stack())
+        try:
+            logging.debug('{0}entering {1}'.format(indent, fn.__name__))
+            return fn(*args, **kwargs)
+        except:
+            logging.debug('{0}exception in {1}'.format(indent, fn.__name__))
+            raise
+        else:
+            logging.debug('{0}leaving {1}'.format(indent, fn.__name__))
+
+    return wrapper
 
 
 def timeit(fn):
@@ -78,13 +95,18 @@ def copy_to_tmp(filename, tmpdir):
         # copy current file into 'tmp' directory
         new_fname = '{}/{}'.format(tmpdir, filename.split('/')[-1])
         shutil.copy(filename, new_fname)
+        # cp_cmd = "cp {} {}".format(filename, new_fname)
+        # os.system(cp_cmd)
         return new_fname
     elif suffix == 'gzip':
         new_fname = '{}/{}'.format(tmpdir, filename.split('/')[-1])
         shutil.copy(filename, new_fname)
+        # cp_cmd = "cp {} {}".format(filename, new_fname)
+        # os.system(cp_cmd)
         xml_fname = new_fname[:-5]
         cmd = "gunzip -S .gzip {}".format(new_fname)
         os.system(cmd)
         return xml_fname
     else:
         return False
+
