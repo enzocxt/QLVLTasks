@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import sys
 import codecs
 import html
 from collections import defaultdict
@@ -298,28 +299,41 @@ class FilenameGetter(object):
             nation = 'Belgium'
         else:
             nation = 'Other'
+        ppath = "{outdir}/{nation}/{year}/{news}".format(
+                 outdir=output_dir, nation=nation, year=jaar, news=krant)
+
+        if sys.version_info[0] < 3.2:
+            # recursively create directories if they do not exist
+            steps = [nation, jaar, krant]
+            next_folder = output_dir
+            for step in steps:
+                next_folder = os.path.join(next_folder, step)
+                if not os.path.exists(next_folder):
+                    try:
+                        os.makedirs(next_folder)
+                    except OSError as e:
+                        if e.errno != os.errno.EEXIST:
+                            raise e
+                    except Exception as e:
+                        if not os.path.exists(next_folder):
+                            raise e
+        else:
+            os.makedirs(ppath, exist_ok=True)
+
         filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}_{id}.conll".format(
             outdir=output_dir, nation=nation, year=jaar, news=krant,
             krant=krant, datum=datum, id=id)
-
-        # recursively create directories if they do not exist
-        folders = filename.split('/')
-        for i in range(3, len(folders)):
-            path = '/'.join(folders[:i])
-            if not os.path.exists(path):
-                try:
-                    os.makedirs(path)
-                except OSError as exc:
-                    # if exc.errno != errno.EEXIST:
-                    #    raise
-                    raise exc
-
         return filename
 
     @classmethod
     def get_output_fname_TwNC(cls, file_id, output_dir):
         # 'nrc20040408.alpino.xml'
-        name = file_id.split('.')[0]
+        # volkskrant20040227_up.artikelen-A.alpino.xml
+        if '.alpino.xml' not in file_id:
+            # must contain '.alpino.xml'
+            raise ValueError("Incorrect file name.")
+        name = file_id.replace('.alpino.xml', '')
+
         idx = 0
         for i, c in enumerate(name):
             if c.isdigit():
@@ -335,22 +349,27 @@ class FilenameGetter(object):
             nation = 'Belgium'
         else:
             nation = 'Other'
-        filename = "{outdir}/{nation}/{year}/{news}/{krant}_{datum}.conll".format(
-            outdir=output_dir, nation=nation, year=jaar, news=krant,
-            krant=krant, datum=datum)
+        ppath = "{outdir}/{nation}/{year}/{news}".format(
+                 outdir=output_dir, nation=nation, year=jaar, news=krant)
 
-        # recursively create directories if they do not exist
-        folders = filename.split(os.sep)
-        for i in range(3, len(folders)):
-            path = os.sep.join(folders[:i])
-            if not os.path.exists(path):
-                try:
-                    os.makedirs(path)
-                except OSError as exc:
-                    # if exc.errno != errno.EEXIST:
-                    #    raise
-                    raise exc
-                except Exception as e:
-                    raise e
+        if sys.version_info[0] < 3.2:
+            # recursively create directories if they do not exist
+            steps = [nation, jaar, krant]
+            next_folder = output_dir
+            for step in steps:
+                next_folder = os.path.join(next_folder, step)
+                if not os.path.exists(next_folder):
+                    try:
+                        os.makedirs(next_folder)
+                    except OSError as e:
+                        if e.errno != os.errno.EEXIST:
+                            raise e
+                    except Exception as e:
+                        if not os.path.exists(next_folder):
+                            raise e
+        else:
+            os.makedirs(ppath, exist_ok=True)
 
+        filename = "{ppath}/{krant}_{datum}.conll".format(
+                    ppath=ppath, krant=krant, datum=datum)
         return filename

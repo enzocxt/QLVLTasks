@@ -5,15 +5,14 @@ import os
 import codecs
 import logging
 import re
-import traceback
 
 from xml.parsers.expat import ExpatError
-from xml.dom.minidom import parseString, Node
-from xml.sax.saxutils import escape, unescape, quoteattr
+from xml.dom.minidom import parseString
 
 from .alpino2tabUtils import *
 
 
+# set logger for LeNC
 logger = logging.getLogger('[alpino2tab:LeNC]')
 logger.setLevel(logging.INFO)
 
@@ -29,63 +28,18 @@ logger.addHandler(file_handler)
 
 
 options_dict = {
-    'all_warns': True,
-    'blanks': False,
     'concat_mwu': False,
     'encoding': 'latin-1',
-    'file': True,
-    'link_du': True,
-    'mark_mwu_alpino': False,
-    'projective': True,
-    'root': True,
-    'terminator': '',
-    'word_count': True,
 }
 
 
 class Options(object):
     def __init__(self, options_dict):
-        self.all_warns = options_dict['all_warns']
-        self.blanks = options_dict['blanks']
         self.concat_mwu = options_dict['concat_mwu']
         self.encoding = options_dict['encoding']
-        self.file = options_dict['file']
-        self.link_du = options_dict['link_du']
-        self.mark_mwu_alpino = options_dict['mark_mwu_alpino']
-        self.projective = options_dict['projective']
-        self.root = options_dict['root']
-        self.terminator = options_dict['terminator']
-        self.word_count = options_dict['word_count']
 
 
 options = Options(options_dict)
-
-
-def parse(input_fname, output_fname):
-    try:
-        with open(input_fname) as xmlstream:
-            xml_version = xmlstream.readline()
-            xmlstring = xmlstream.read()
-            lines = xmlstring.strip().split('\n')
-            i = 0
-            while True:
-                line = lines[i]
-                if not line.startswith('<!') and not line.startswith('<?'):
-                    break
-                i += 1
-            lines = lines[i+1:-1]
-            xmlfile = '\n'.join(lines)
-            articles = xmlfile.split('</xmlfile>')
-            articles = [(s + '</xmlfile>').strip() for s in articles[:-1]]
-
-            get_alpino_ds()
-
-    except Exception as e:
-        print(e)
-
-
-def get_alpino_ds():
-    pass
 
 
 def get_tag(xml_line):
@@ -102,8 +56,8 @@ def get_tag(xml_line):
 def alpino2tab(input_fname, output_fname):
     fname = input_fname.split(os.sep)[-1]
     try:
-        with codecs.open(input_fname, 'r', options_dict['encoding']) as xmlstream,\
-             codecs.open(output_fname, 'w', options_dict['encoding']) as tabstream:
+        with codecs.open(input_fname, 'r', options.encoding) as xmlstream, \
+             codecs.open(output_fname, 'w', options.encoding) as tabstream:
             xml_version = xmlstream.readline().strip()    # xml version
             doctype = xmlstream.readline()
             conv_version = xmlstream.readline()
@@ -241,26 +195,11 @@ def convert(tree, tabstream):
 
     index = {}
     createIndex(topnode, index)
-    '''
-    words = [e.getAttribute('word') for e in index.values()]
-    if len(tokens) != len(words):
-        # print(tokens)
-        # print(words)
-        tokens = concat_tokens(tokens, set(words))
-        # print(tokens)
-    '''
 
     reattachPunctuation(topnode, index)
-    # tabstream.write('<sentence>\n')
-    sent_str = writeOutput(index, tabstream)
+    sent_str = writeOutput(index)
     sent_str = "<sentence>\n{}\n</sentence>\n".format(sent_str)
-    # tabstream.write('</sentence>\n')
     tabstream.write(sent_str)
-    # tokens do not match words
-    # the xml element may be parsed incorrectly
-    # after process this tree, record this error in log
-    # if len(tokens) != len(words):
-    #    raise ValueError("Tokens in sentence do not match words in xml attributes!!!")
 
 
 def convert_log(tree, tabstream, fname):
@@ -275,7 +214,6 @@ def convert_log(tree, tabstream, fname):
                      "\nKeyError: writeOutput() for sentence"
                      .format(fname))
     except Exception as e:
-        # traceback.print_exc()
         logger.error("\n[alpino2tab:convert_log()] input file: {}"
                      "\nError: {}"
                      .format(fname, e))

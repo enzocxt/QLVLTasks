@@ -2,7 +2,7 @@ import os
 import codecs
 
 from collections import defaultdict
-# from corpconv.Sentence import Sentence
+# from corpconv2.Sentence import Sentence
 
 
 import xml.etree.ElementTree as ET

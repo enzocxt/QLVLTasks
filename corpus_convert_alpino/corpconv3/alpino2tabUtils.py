@@ -5,6 +5,9 @@ import string
 import os.path
 import optparse
 import codecs
+from collections import defaultdict
+from xml.dom.minidom import parseString, Node
+from xml.parsers.expat import ExpatError
 from xml.dom.minidom import parseString, Node
 
 
@@ -48,6 +51,88 @@ class ConversionError(Exception):
 
 class NegativeHeadError(ConversionError):
     pass
+
+
+def concat_tokens(uncat_tokens, words):
+    """
+    concatenate tokens
+    :param uncat_tokens: original tokens split from sentence
+    :param words: a set of words got from word attributes
+    :return: concatenated tokens
+    """
+    # print("\n\n**************************\n")
+    # print(uncat_tokens)
+    # print(words)
+    common = words.intersection(set(uncat_tokens))
+    cat_words = words - common
+    cat_map = defaultdict(list)
+    for wrd in cat_words:
+        split_wrds = wrd.split()
+        if len(split_wrds) == 0:
+            # there is only whitespace in this wrd
+            continue
+        fst_tok = split_wrds[0]
+        cat_map[fst_tok].append(wrd)
+
+    tokens = []
+    num_tok = len(uncat_tokens)
+    i = 0
+    while i < num_tok:
+        tok = uncat_tokens[i]
+        if tok not in cat_map:
+            # if tok not in cat_map and the xml element is correct
+            # tok should be in common
+            assert(tok in common)
+            tokens.append(tok)
+            i += 1
+        else:
+            cat_wrd_list = cat_map[tok]
+            # in most cases, there is only one in cat_wrd_list
+            found = False
+            for cat_wrd in cat_wrd_list:
+                split_wrds = cat_wrd.split()
+                k = len(split_wrds)
+                if i + k > num_tok:
+                    continue
+                # cat_tok for checking word, which has whitespace letter in it
+                eql = isEqual(uncat_tokens[i:i+k], split_wrds)
+                # the whitespace in cat_wrd would be '\xa0', '\x85',...
+                # cat_tok = '\xa0'.join(uncat_tokens[i:i+k])
+                # print(cat_wrd)
+                # print(cat_tok)
+                # if cat_wrd == cat_tok:
+                if eql:
+                    # cat_tok that needs to be concatenated, without space
+                    cat_tok = ''.join(uncat_tokens[i:i+k])
+                    tokens.append(cat_tok)
+                    i += k
+                    found = True
+                    break
+            # if tok in cat_map, but cannot find a cat_wrd matching this tok
+            # then: (1) this tok is an alone token
+            #       (2) there is an error between tokens and words
+            if not found:
+                if tok in common:
+                    tokens.append(tok)
+                    i += 1
+                else:
+                    raise ValueError("Tokens in sentence do not match words in xml attributes")
+
+    # assert len(tokens) == len(words)
+    return tokens
+
+
+def isEqual(tokens, words):
+    """
+    check if a list of tokens is equal to a list words
+    which means that every corresponding token and word is equal
+    """
+    if len(tokens) != len(words):
+        return False
+    for tok, wrd in zip(tokens, words):
+        if tok != wrd:
+            return False
+    return True
 
 
 def split_by_tagname(text, tagname):
@@ -344,6 +429,74 @@ def createIndex(parent, index=None):
         createIndex(child, index)
 
 
+def writeOutput(index, tabstream=sys.stdout):
+
+    size = len(index.keys())
+    output = []
+    for i in range(size):
+        word = index[i].getAttribute('word')
+        split_wrds = word.split()
+        if len(split_wrds) >= 2:
+            word = ''.join(split_wrds)
+        word_count = ''
+        if options.word_count:
+            if options.blanks:
+                word_count = '{:<4}'.format(i + 1)
+            else:
+                word_count = '{}\t'.format(i + 1)
+
+        if options.blanks:
+            word_str = '{:<20}'.format(word)
+        else:
+            word_str = '{}\t'.format(word)
+
+        root_str = ''
+        if options.root:
+            root = index[i].getAttribute('root')    # .replace(' ', '_')
+            split_lems = root.split()
+            if len(split_lems) >= 2:
+                root = '_'.join(split_lems)
+            if options.blanks:
+                root_str = '{:<20}'.format(root)
+            else:
+                root_str = '{}\t'.format(root)
+
+        if options.blanks:
+            pos_str = '{:<10}'.format(index[i].getAttribute('pos'))
+        else:
+            pos_str = '{}\t'.format(index[i].getAttribute('pos'))
+
+        rel = index[i].getAttribute('rel')
+
+        if rel == '--':
+            rel = 'ROOT'
+            head = 0
+        else:
+            head = int(index[i].parentNode.getAttribute('begin')) + 1
+
+        if options.blanks:
+            rel_str = '{:<4}{:<10}'.format(head, rel)
+        else:
+            rel_str = '{}\t{}'.format(head, rel)
+
+        lasttwo = ''
+        if options.projective:
+            if options.blanks:
+                lasttwo = '  _  _'
+            else:
+                lasttwo = '\t_\t_'
+
+        line = (word_count + word_str + root_str +
+                pos_str + rel_str + lasttwo)
+        output.append(line)
+
+    if options.terminator:
+        # tabstream.write('%s' % options.terminator)
+        output.append('{}'.format(options.terminator))
+
+    return '\n'.join(output)
+
+
 def writeOutputNew(tokens, index, tabstream=sys.stdout):
 
     output = []
@@ -430,7 +583,7 @@ def writeOutputNew(tokens, index, tabstream=sys.stdout):
     return '\n'.join(output)
 
 
-def writeOutput(tokens, index, tabstream=sys.stdout):
+def writeOutputOriginal(tokens, index, tabstream=sys.stdout):
     """
     write output in tabular form
     """

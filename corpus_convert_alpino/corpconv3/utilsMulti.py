@@ -7,9 +7,9 @@ from tqdm import tqdm
 
 from .utils import copy_to_tmp
 from .utilsClass import FilenameGetter, Parser
-from .alpino2tab_v2_TwNC import alpino2tab as convert_TwNC
-from .alpino2tab_v2_LeNC import alpino2tab as convert_LeNC
-from .alpino2tab_v2_SoNaR import alpino2tab as convert_SoNaR
+from .alpino2tab_v2_TwNC import alpino2tab as alpino_TwNC
+from .alpino2tab_v2_LeNC import alpino2tab as alpino_LeNC
+from .alpino2tab_v2_SoNaR import alpino2tab as alpino_SoNaR
 from .alpino2tabUtils import NegativeHeadError
 
 
@@ -66,68 +66,77 @@ def call_multi(corpus_name, input_root, io_paths, files, meta_dict=None):
             'indent': subindent,
             'meta_dict': meta_dict,
         }
-        pool.apply_async(alpino2tab_multi, args=args, kwds=kwds)
+        pool.apply_async(convert_multi, args=args, kwds=kwds)
     pool.close()
     pool.join()
 
 
-def alpino2tab_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None):
-    input_dir, tmpDIR_dir, output_dir, tmpOUT_dir = io_paths
+def convert_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None):
+    input_dir, output_dir = io_paths
 
     pid = os.getpid()
-    tmpDIR_dir_proc = '{}_{}'.format(tmpDIR_dir, pid)
-    if not os.path.exists(tmpDIR_dir_proc):
-        os.makedirs(tmpDIR_dir_proc)
-    # only for SoNaR
-    tmpOUT_dir_proc = '{}_{}'.format(tmpOUT_dir, pid)
-    if not os.path.exists(tmpOUT_dir_proc):
-        os.makedirs(tmpOUT_dir_proc)
+    tmpin_dir_proc = '{}{}tmpin_{}'.format(output_dir, os.sep, pid)
+    if not os.path.exists(tmpin_dir_proc):
+        os.makedirs(tmpin_dir_proc)
+    tmpout_dir_proc = '{}{}tmpout_{}'.format(output_dir, os.sep, pid)
+    if not os.path.exists(tmpout_dir_proc):
+        os.makedirs(tmpout_dir_proc)
 
+    convert_mapping = {
+        'TwNC': convert_TwNC,
+        'LeNC': convert_LeNC,
+        'SoNaR': convert_SoNaR,
+    }
+    cur_io_paths = (input_dir, tmpin_dir_proc, output_dir, tmpout_dir_proc)
+    if corpus_name not in convert_mapping:
+        raise AttributeError('Unsupported corpus name: {}!'.format(corpus_name))
+    convert = convert_mapping[corpus_name]
     fnames = tqdm(fnames, unit='file', desc='{}proc({})'.format(indent, pid))
     for fname in fnames:
-        if corpus_name == 'TwNC':
-            alpino2tab_TwNC(fname, tmpDIR_dir_proc, output_dir)
-        elif corpus_name == 'LeNC':
-            cur_io_paths = (input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc)
-            alpino2tab_LeNC(fname, cur_io_paths)
-        elif corpus_name == 'SoNaR':
-            cur_io_paths = (input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc)
-            alpino2tab_SoNaR(fname, cur_io_paths, meta_dict=meta_dict)
-        else:
-            raise AttributeError('Unsupported corpus name: {}!'.format(corpus_name))
+        args = (fname, cur_io_paths)
+        kwargs = {
+            'meta_dict': meta_dict,
+        }
+        try:
+            convert(*args, **kwargs)
+        except Exception as e:
+            logger.error('\ninput file: {}'.format(fname))
+            logger.error(e)
 
     # remove input tmp directory
-    os.rmdir(tmpDIR_dir_proc)
-    # os.system("rm -r {}".format(tmpDIR_dir_proc))
-    # remove output tmp directory only for SoNaR
-    os.rmdir(tmpOUT_dir_proc)
-    # os.system("rm -r {}".format(tmpOUT_dir_proc))
+    os.rmdir(tmpin_dir_proc)
+    # remove output tmp directory
+    os.rmdir(tmpout_dir_proc)
 
 
-def alpino2tab_TwNC(fname, tmpDIR_dir_proc, output_dir):
-    input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
+def convert_TwNC(fname, io_paths, meta_dict=None):
+    _input_dir, tmpin_dir_proc, output_dir, tmpout_dir_proc = io_paths
+    input_fname = copy_to_tmp(fname, tmpin_dir_proc)
     tmp_in_fname = input_fname.split('/')[-1]
+    output_fname = None
+
     try:
         output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
     except Exception as e:
-        logger.error('\ninput file: {}\noutput file: {}'.format(tmp_in_fname, output_fname.replace(output_dir, '...')))
-        logger.error(e)
-    try:
-        convert_TwNC(input_fname, output_fname)
-    except Exception as e:
-        logger.error('\ninput file: {}\noutput file: {}'.format(tmp_in_fname, output_fname.replace(output_dir, '...')))
+        logger.error('\n[Get output filename] input file: \n{}'.format(tmp_in_fname))
         logger.error(e)
 
-    # remove input file in tmpDIR_dir
+    if output_fname is not None:
+        try:
+            alpino_TwNC(input_fname, output_fname)
+        except Exception as e:
+            logger.error('\ninput file: {}\noutput file: {}'.format(tmp_in_fname, output_fname.replace(output_dir, '...')))
+            logger.error(e)
+
     os.remove(input_fname)
 
 
-def alpino2tab_LeNC_nosplit(fname, tmpDIR_dir_proc, output_dir):
+def convert_LeNC_nosplit(fname, tmpDIR_dir_proc, output_dir):
     input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
     tmp_in_fname = input_fname.split('/')[-1]
     output_fname = FilenameGetter.get_output_fname_LeNC(tmp_in_fname, output_dir)
     try:
-        convert_LeNC(input_fname, output_fname)
+        alpino_LeNC(input_fname, output_fname)
     except NegativeHeadError:
         logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
         logger.error("Negative value for head")
@@ -139,20 +148,17 @@ def alpino2tab_LeNC_nosplit(fname, tmpDIR_dir_proc, output_dir):
     os.remove(input_fname)
 
 
-def alpino2tab_LeNC(fname, io_paths):
-    _input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc = io_paths
+def convert_LeNC(fname, io_paths, meta_dict=None):
+    _input_dir, tmpin_dir_proc, output_dir, tmpout_dir_proc = io_paths
 
-    input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
+    input_fname = copy_to_tmp(fname, tmpin_dir_proc)
     tmp_in_fname = input_fname.split('/')[-1]
     tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
-    output_fname = '{}/{}'.format(tmpOUT_dir_proc, tmp_out_fname)
+    output_fname = '{}/{}'.format(tmpout_dir_proc, tmp_out_fname)
     # output_fname = FilenameGetter.get_output_fname_LeNC(tmp_in_fname, output_dir)
-    pid = os.getpid()
+
     try:
-        convert_LeNC(input_fname, output_fname)
-    except NegativeHeadError:
-        logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
-        logger.error("Negative value for head")
+        alpino_LeNC(input_fname, output_fname)
     except Exception as e:
         logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
         logger.error(e)
@@ -160,28 +166,25 @@ def alpino2tab_LeNC(fname, io_paths):
     try:
         Parser.split_LeNC(output_fname, output_dir)
     except Exception as e:
-        logger.error('\ninput file: {}\noutput file: {} [{}]'.format(input_fname, output_fname, pid))
+        logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
         logger.error(e)
 
-    # remove input file in tmpDIR_dir
     os.remove(input_fname)
-    # remove output file in tmpOUT_dir
     os.remove(output_fname)
 
 
-def alpino2tab_SoNaR(fname, io_paths, meta_dict=None):
-    _input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc = io_paths
+def convert_SoNaR(fname, io_paths, meta_dict=None):
+    _input_dir, tmpin_dir_proc, output_dir, tmpout_dir_proc = io_paths
 
-    input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
+    input_fname = copy_to_tmp(fname, tmpin_dir_proc)
     tmp_in_fname = input_fname.split('/')[-1]
     tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
-    output_fname = '{}/{}'.format(tmpOUT_dir_proc, tmp_out_fname)
+    output_fname = '{}/{}'.format(tmpout_dir_proc, tmp_out_fname)
 
-    pid = os.getpid()
     try:
-        convert_SoNaR(input_fname, output_fname)
+        alpino_SoNaR(input_fname, output_fname)
     except Exception as e:
-        logger.error('\ninput file: {}\noutput file: {} [{}]'.format(input_fname, output_fname, pid))
+        logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
         logger.error(e)
 
     # if provided meta_dict (indicating that we are processing SoNaR)
@@ -189,103 +192,8 @@ def alpino2tab_SoNaR(fname, io_paths, meta_dict=None):
     try:
         Parser.parse(output_fname, output_dir, meta_dict)
     except Exception as e:
-        logger.error('\ninput file: {}\noutput file: {} [{}]'.format(input_fname, output_fname, pid))
+        logger.error('\ninput file: {}\noutput file: {}'.format(input_fname, output_fname))
         logger.error(e)
 
-    # remove input file in tmpDIR_dir
     os.remove(input_fname)
-    # remove output file in tmpOUT_dir
     os.remove(output_fname)
-
-
-def xq_multi(corpus_name, fnames, io_paths, command='', indent='', dtd_fname=None, meta_dict=None):
-    input_dir, tmpDIR_dir, output_dir, tmpOUT_dir = io_paths
-
-    pid = os.getpid()
-    tmpDIR_dir_proc = '{}_{}'.format(tmpDIR_dir, pid)
-    if not os.path.exists(tmpDIR_dir_proc):
-        os.makedirs(tmpDIR_dir_proc)
-    # only for SoNaR
-    tmpOUT_dir_proc = '{}_{}'.format(tmpOUT_dir, pid)
-    if not os.path.exists(tmpOUT_dir_proc):
-        os.makedirs(tmpOUT_dir_proc)
-
-    fnames = tqdm(fnames, unit='file', desc='{}proc({})'.format(indent, pid))
-    # if provided dtd file, copy it to this directory
-    if corpus_name == 'LeNC':
-        if dtd_fname is None:
-            raise AttributeError('Should provide dtd file for LeNC corpus!')
-        cp_cmd = "cp {} {}".format(dtd_fname, tmpDIR_dir_proc)
-        os.system(cp_cmd)
-
-    for fname in fnames:
-        if corpus_name == 'TwNC':
-            xq_TwNC(fname, tmpDIR_dir_proc, output_dir, command=command)
-        elif corpus_name == 'LeNC':
-            xq_LeNC(fname, tmpDIR_dir_proc, output_dir, command=command)
-        elif corpus_name == 'SoNaR':
-            cur_io_paths = (input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc)
-            xq_SoNaR(fname, cur_io_paths, command=command, meta_dict=meta_dict)
-        else:
-            raise AttributeError('Unsupported corpus name: {}!'.format(corpus_name))
-
-    # remove input tmp directory
-    os.system("rm -r {}".format(tmpDIR_dir_proc))
-    # remove output tmp directory only for SoNaR
-    os.system("rm -r {}".format(tmpOUT_dir_proc))
-
-
-def xq_TwNC(fname, tmpDIR_dir_proc, output_dir, command=''):
-    input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
-    tmp_in_fname = input_fname.split('/')[-1]
-    output_fname = FilenameGetter.get_output_fname_TwNC(tmp_in_fname, output_dir)
-
-    # run xQuery command
-    cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir_proc, output_fname)
-    status = os.system(cmd)
-    if status != 0:  # command does not succeed
-        logger.error('\ninput file: {}\noutput file: {}'.format(fname, output_fname))
-
-    # remove input file in tmpDIR_dir
-    os.system("rm {}".format(input_fname))
-    # we don't have tmp output file for LeNC & TwNC corpus
-
-
-def xq_LeNC(fname, tmpDIR_dir_proc, output_dir, command=''):
-    input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
-    tmp_in_fname = input_fname.split('/')[-1]
-    output_fname = FilenameGetter.get_output_fname_LeNC(tmp_in_fname, output_dir)
-
-    # run xQuery command
-    cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir_proc, output_fname)
-    status = os.system(cmd)
-    if status != 0:  # command does not succeed
-        logger.error('\ninput file: {}\noutput file: {}'.format(fname, output_fname))
-
-    # remove input file in tmpDIR_dir
-    os.system("rm {}".format(input_fname))
-    # we don't have tmp output file for TwNC corpus
-
-
-def xq_SoNaR(fname, io_paths, command='', meta_dict=None):
-    _input_dir, tmpDIR_dir_proc, output_dir, tmpOUT_dir_proc = io_paths
-
-    input_fname = copy_to_tmp(fname, tmpDIR_dir_proc)
-    tmp_in_fname = input_fname.split('/')[-1]
-    tmp_out_fname = '.'.join(tmp_in_fname.split('.')[:-1] + ['conllu'])
-    output_fname = '{}/{}'.format(tmpOUT_dir_proc, tmp_out_fname)
-
-    # run xQuery command
-    cmd = "{} DIR={} -o:{}".format(command, tmpDIR_dir_proc, output_fname)
-    status = os.system(cmd)
-    if status != 0:  # command does not succeed
-        logger.error('\ninput file: {}\noutput file: {}'.format(fname, output_fname))
-
-    # if provided meta_dict (indicating that we are processing SoNaR)
-    # split intermediate output into files
-    Parser.parse(output_fname, output_dir, meta_dict)
-
-    # remove input file in tmpDIR_dir
-    os.system("rm {}".format(input_fname))
-    # remove output file in tmpOUT_dir
-    os.system("rm {}".format(output_fname))

@@ -63,46 +63,19 @@ def alpino2tab(input_fname, output_fname):
             xml_version = xmlstream.readline()    # xml version
             xmlstream.readline()    # <alpino-sentences>
             context = xmlstream.read()
-            # alpinods = context.split('</alpino_ds>')
-            # alpinods = [(xml_version + s + '</alpino_ds>').strip() for s in alpinods[:-1]]
             alpinods = split_by_tagname(context, 'alpino_ds')
             alpinods = [xml_version + alp for alp in alpinods]
 
             tabstream.write('<article>\n')
             for tree in alpinods:
-                # if article cannot be parsed
-                # record error and skip
-                try:
-                    tree = parseString(tree).documentElement
-                except ExpatError as e:
-                    logger.error("\ninput file: {}"
-                                 "\nxml.parsers.expat.ExpatError: not well-formed (invalid token)"
-                                 .format(fname))
+                tree = parse_string(tree, fname)
+                if tree is False:
                     continue
-                except Exception as e:
-                    logger.error("\ninput file: {}"
-                                 "\nError: cannot parse xml sentence\n{}"
-                                 .format(fname, e))
-                    continue
-
                 # skip empty nodes
                 if tree.nodeType == Node.TEXT_NODE and tree.data.strip() == '':
                     continue
+                convert_log(tree, tabstream, fname)
 
-                try:
-                    convert(tree, tabstream)
-                except NegativeHeadError as e:
-                    logger.error("\ninput file: {}"
-                                 "\nNegativeHeadError: {}"
-                                 .format(fname, e))
-                except KeyError:
-                    logger.error("\ninput file: {}"
-                                 "\nKeyError: writeOutput() for sentence"
-                                 .format(fname))
-                except Exception as e:
-                    logger.error("\ninput file: {}"
-                                 "\nError: {}"
-                                 .format(fname, e))
             tabstream.write('</article>')
     except IOError as e:
         logger.error("\ninput file: {}"
@@ -131,23 +104,58 @@ def convert(tree, tabstream):
 
     index = {}
     createIndex(topnode, index)
-    words = [e.getAttribute('word') for e in index.values()]
-    tokens = [''.join(w.split()) for w in words]
     '''
-    roots = [e.getAttribute('word') for e in index.values()]
-    if len(words) != len(tokens) or len(roots) != len(tokens):
-        for w, r in zip(words, roots):
-            if w != r:
-                print(w, r)
-        words = [''.join(w.split()) for w in words]
+    words = [e.getAttribute('word') for e in index.values()]
+    # words = [''.join(w.split()) for w in words]
+    if len(tokens) != len(words):
+        tokens = concat_tokens(tokens, set(words))
+        if len(tokens) != len(words):
+            raise ValueError("Tokens in sentence do not match words in xml attributes!!!")
     '''
 
     reattachPunctuation(topnode, index)
     # tabstream.write('<sentence>\n')
-    sent_str = writeOutputNew(tokens, index, tabstream)
+    sent_str = writeOutput(index, tabstream)
+    # sent_str = writeOutputNew(tokens, index, tabstream)
     # tabstream.write('</sentence>\n')
     sent_str = '<sentence>\n{}\n</sentence>\n'.format(sent_str)
     tabstream.write(sent_str)
+
+
+def convert_log(tree, tabstream, fname):
+    try:
+        convert(tree, tabstream)
+    except NegativeHeadError as e:
+        logger.error("\ninput file: {}"
+                     "\nNegativeHeadError: {}"
+                     .format(fname, e))
+    except KeyError:
+        logger.error("\ninput file: {}"
+                     "\nKeyError: writeOutput() for sentence"
+                     .format(fname))
+    except Exception as e:
+        logger.error("\ninput file: {}"
+                     "\nError: {}"
+                     .format(fname, e))
+
+
+def parse_string(tree, fname):
+    # if article cannot be parsed
+    # record error and skip
+    try:
+        tree = parseString(tree).documentElement
+    except ExpatError as e:
+        logger.error("\n[alpino2tab:parse_string()] input file: {}"
+                     "\nxml.parsers.expat.ExpatError: not well-formed (invalid token)"
+                     .format(fname))
+        return False
+    except Exception as e:
+        logger.error("\n[alpino2tab:parse_string()] input file: {}"
+                     "\nError: cannot parse xml sentence\n{}"
+                     .format(fname, e))
+        return False
+
+    return tree
 
 
 def convert_v2(xmlstream, tabstream):

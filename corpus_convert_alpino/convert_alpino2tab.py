@@ -1,7 +1,7 @@
 import os
 
-from corpconv3.utils import timeit, list_dir_tree
-from corpconv3.baseHandler import CorpusHandler
+from corpconv.utils import timeit, list_dir_tree
+from corpconv.baseHandler import CorpusHandler
 
 
 ''' Method calling procedure
@@ -70,7 +70,9 @@ def main_SoNaR():
 
 
 if __name__ == '__main__':
-    main_TwNC()
-    main_LeNC()
+    # main_TwNC()
+    # main_LeNC()
     main_SoNaR()
+    # for i in range(10):
+    #     main_TwNC()
 

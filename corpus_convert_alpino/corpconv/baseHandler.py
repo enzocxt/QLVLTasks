@@ -6,37 +6,23 @@ import logging
 import multiprocessing as mp
 from tqdm import tqdm
 
-from .logging import create_logger
 from .utils import file_filter
 from .utilsMulti import convert_multi
 from .utilsClass import MetaData
-from .Converter import LeNCConverter, TwNCConverter, SoNaRConverter
-from .ConverterMulti import LeNCConverterMulti, TwNCConverterMulti, SoNaRConverterMulti
 
 
 logger = logging.getLogger('[alpino2tab]')
 
 
 class CorpusHandler(object):
-    _mapper = {
-        'SoNaR': SoNaRConverter,
-        'LeNC': LeNCConverter,
-        'TwNC': TwNCConverter,
-    }
-    _mapper_multi = {
-        'SoNaR': SoNaRConverterMulti,
-        'LeNC': LeNCConverterMulti,
-        'TwNC': TwNCConverterMulti,
-    }
-
     def __init__(
-        self,
-        corpus_name,
-        input_dir,
-        output_dir,
-        command='',
-        dtd_fname=None,
-        meta_files=None
+            self,
+            corpus_name,
+            input_dir,
+            output_dir,
+            command='',
+            dtd_fname=None,
+            meta_files=None
     ):
         """
         :param corpus_name: LeNC, TwNC, SoNaR
@@ -110,46 +96,11 @@ class CorpusHandler(object):
         except Exception as e:
             logger.error(e)
 
-    def run(self):
-        corpus_name = self.corpus_name
-        input_dir, output_dir = self.input_dir, self.output_dir
-        command = self.command
-        dtd_fname, meta_files = self.dtd_fname, self.meta_files
-
-        # setup environment
-        tmpDIR_dir, tmpOUT_dir = self.setup_env(output_dir)
-
-        # if processing LeNC corpus, dtd file is needed
-        if corpus_name == 'LeNC':
-            if dtd_fname is None:
-                raise AttributeError('Must provide dtd file!')
-            else:
-                cp_cmd = "cp {} {}".format(dtd_fname, tmpDIR_dir + '/')
-                os.system(cp_cmd)
-
-        # read meta data for corpus SoNaR
-        meta_dict = self.read_metadata(corpus_name, meta_files=meta_files)
-
-        if command is None or command == '':
-            raise AttributeError("Command should not be empty!")
-
-        # recursively convert corpus files in input directory
-        io_paths = (input_dir, tmpDIR_dir, output_dir, tmpOUT_dir)
-        converter = self._mapper[corpus_name]
-        converter.convert(io_paths, command=command, meta_dict=meta_dict)
-
-        # clean tmp folders
-        self.clean_env(tmpDIR_dir, tmpOUT_dir)
-
     def run_multi(self):
 
         # setup environment
         # self.tmpDIR_dir, self.tmpOUT_dir = self.setup_env(self.output_dir)
 
-        # recursively convert corpus files in input directory
-        # io_paths = (input_dir, tmpDIR_dir, output_dir, tmpOUT_dir)
-        # converter = self._mapper_multi[corpus_name]
-        # converter.convert_multi(input_dir, io_paths, meta_dict=meta_dict)
         self.deliver_and_run(self.input_dir)
 
         # clean tmp folders

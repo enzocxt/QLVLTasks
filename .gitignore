@@ -21,3 +21,4 @@ corpus_convert_alpino/test*
 corpus_convert_alpino/tmp*
 corpus_convert_alpino/*.bak
 corpus_convert_alpino/*files
+corpus_convert_alpino/log_bak*
