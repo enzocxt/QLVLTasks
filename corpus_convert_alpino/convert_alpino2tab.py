@@ -70,8 +70,8 @@ def main_SoNaR():
 
 
 if __name__ == '__main__':
-    main_TwNC()
-    main_LeNC()
+    # main_TwNC()
+    # main_LeNC()
     main_SoNaR()
     # for i in range(10):
     #     main_TwNC()
