@@ -1,6 +1,7 @@
 import os
 import codecs
 import logging
+import traceback
 
 from xml.parsers.expat import ExpatError
 from xml.dom.minidom import parseString, Node
@@ -55,7 +56,7 @@ class Options(object):
 options = Options(options_dict)
 
 
-def alpino2tab(input_fname, output_fname):
+def alpino2tab(input_fname, output_fname, map_dict):
     fname = input_fname.split(os.sep)[-1]
     try:
         with codecs.open(input_fname, 'r', options_dict['encoding']) as xmlstream,\
@@ -74,7 +75,7 @@ def alpino2tab(input_fname, output_fname):
                 # skip empty nodes
                 if tree.nodeType == Node.TEXT_NODE and tree.data.strip() == '':
                     continue
-                convert_log(tree, tabstream, fname)
+                convert_log(tree, tabstream, fname, map_dict)
 
             tabstream.write('</article>')
     except IOError as e:
@@ -87,7 +88,7 @@ def alpino2tab(input_fname, output_fname):
                      .format(fname, e))
 
 
-def convert(tree, tabstream):
+def convert(tree, tabstream, map_dict):
     """
     convert dependency tree in Alpino XML format to tabular format.
     """
@@ -115,16 +116,16 @@ def convert(tree, tabstream):
 
     reattachPunctuation(topnode, index)
     # tabstream.write('<sentence>\n')
-    sent_str = writeOutput(index, tabstream)
+    sent_str = writeOutputMap(index, map_dict)
     # sent_str = writeOutputNew(tokens, index, tabstream)
     # tabstream.write('</sentence>\n')
     sent_str = '<sentence>\n{}\n</sentence>\n'.format(sent_str)
     tabstream.write(sent_str)
 
 
-def convert_log(tree, tabstream, fname):
+def convert_log(tree, tabstream, fname, map_dict):
     try:
-        convert(tree, tabstream)
+        convert(tree, tabstream, map_dict)
     except NegativeHeadError as e:
         logger.error("\ninput file: {}"
                      "\nNegativeHeadError: {}"

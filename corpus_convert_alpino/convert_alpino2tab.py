@@ -1,7 +1,7 @@
 import os
 
-from corpconv.utils import timeit, list_dir_tree
-from corpconv.baseHandler import CorpusHandler
+from corpconv3.utils import timeit, list_dir_tree
+from corpconv3.baseHandler import CorpusHandler
 
 
 ''' Method calling procedure
@@ -13,12 +13,15 @@ main_TwNC()
 => alpino2tab_multi('TwNC', files, io_paths)
 '''
 
+
 @timeit
 def main_TwNC():
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
-    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/output"
+    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/output/test_mapping"
     # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/twnc_unknownerr_files"
     # output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/twnc_unknownerr_files"
+    mapping_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/" \
+                    "TwNCLeNC.DifferentLemmaMappings-stefano2.txt"
 
     # check whether paths exist
     paths = [input_dir, output_dir]
@@ -27,7 +30,7 @@ def main_TwNC():
             raise AttributeError("File or directory not exists: \n{}".format(p))
 
     list_dir_tree(input_dir)
-    corppar = CorpusHandler('TwNC', input_dir, output_dir)
+    corppar = CorpusHandler('TwNC', input_dir, output_dir, map_file=mapping_fname)
     corppar.run_multi()
 
 
@@ -70,9 +73,9 @@ def main_SoNaR():
 
 
 if __name__ == '__main__':
-    # main_TwNC()
+    main_TwNC()
     # main_LeNC()
-    main_SoNaR()
+    # main_SoNaR()
     # for i in range(10):
     #     main_TwNC()
 

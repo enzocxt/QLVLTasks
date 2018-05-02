@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os
 import shutil
 import logging
+import codecs
 import multiprocessing as mp
 from tqdm import tqdm
 
@@ -36,7 +37,8 @@ class CorpusHandler(object):
         output_dir,
         command='',
         dtd_fname=None,
-        meta_files=None
+        meta_files=None,
+        map_file=None
     ):
         """
         :param corpus_name: LeNC, TwNC, SoNaR
@@ -56,6 +58,8 @@ class CorpusHandler(object):
         self.meta_data = None
         if meta_files is not None:
             self.meta_data = self.read_metadata(corpus_name, meta_files)
+        if map_file is not None:
+            self.map_dict = self.read_mapping(map_file)
         self.tmpDIR_dir = None
         self.tmpOUT_dir = None
 
@@ -80,6 +84,16 @@ class CorpusHandler(object):
         md = MetaData(meta_files)
         meta_dict = md.read_metadata()
         return meta_dict
+
+    @staticmethod
+    def read_mapping(filename):
+        mapping = dict()
+        with codecs.open(filename, 'r', 'latin-1') as inf:
+            for line in inf:
+                tok_from, tok_to = line.strip().split('\t')
+                tok, pos = tok_to.rsplit('/', 1)
+                mapping[tok_from] = tok
+        return mapping
 
     @classmethod
     def setup_env(cls, output_dir):
@@ -199,6 +213,7 @@ class CorpusHandler(object):
             kwds = {
                 'indent': subindent,
                 'meta_dict': self.meta_data,
+                'map_dict': self.map_dict,
             }
             pool.apply_async(convert_multi, args=args, kwds=kwds)
         pool.close()

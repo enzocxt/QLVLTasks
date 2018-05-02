@@ -429,6 +429,82 @@ def createIndex(parent, index=None):
         createIndex(child, index)
 
 
+def writeOutputMap(index, mapping):
+
+    size = len(index.keys())
+    output = []
+    for i in range(size):
+        word = index[i].getAttribute('word')
+        split_wrds = word.split()
+        if len(split_wrds) >= 2:
+            word = ''.join(split_wrds)
+        word_count = ''
+        if options.word_count:
+            if options.blanks:
+                word_count = '{:<4}'.format(i + 1)
+            else:
+                word_count = '{}\t'.format(i + 1)
+
+        pos = index[i].getAttribute('pos')
+        if options.blanks:
+            pos_str = '{:<10}'.format(pos)
+        else:
+            pos_str = '{}\t'.format(pos)
+
+        if options.blanks:
+            word_str = '{:<20}'.format(word)
+        else:
+            word_str = '{}\t'.format(word)
+
+        root_str = ''
+        if options.root:
+            root = index[i].getAttribute('root')    # .replace(' ', '_')
+
+            split_lems = root.split()
+            if len(split_lems) >= 2:
+                root = '_'.join(split_lems)
+
+            # map root
+            tok_from = '{}/{}'.format(root, pos)
+            if tok_from in mapping:
+                root = mapping[tok_from]
+
+            if options.blanks:
+                root_str = '{:<20}'.format(root)
+            else:
+                root_str = '{}\t'.format(root)
+
+        rel = index[i].getAttribute('rel')
+
+        if rel == '--':
+            rel = 'ROOT'
+            head = 0
+        else:
+            head = int(index[i].parentNode.getAttribute('begin')) + 1
+
+        if options.blanks:
+            rel_str = '{:<4}{:<10}'.format(head, rel)
+        else:
+            rel_str = '{}\t{}'.format(head, rel)
+
+        lasttwo = ''
+        if options.projective:
+            if options.blanks:
+                lasttwo = '  _  _'
+            else:
+                lasttwo = '\t_\t_'
+
+        line = (word_count + word_str + root_str +
+                pos_str + rel_str + lasttwo)
+        output.append(line)
+
+    if options.terminator:
+        # tabstream.write('%s' % options.terminator)
+        output.append('{}'.format(options.terminator))
+
+    return '\n'.join(output)
+
+
 def writeOutput(index, tabstream=sys.stdout):
 
     size = len(index.keys())

@@ -71,7 +71,7 @@ def call_multi(corpus_name, input_root, io_paths, files, meta_dict=None):
     pool.join()
 
 
-def convert_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None):
+def convert_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None, map_dict=None):
     input_dir, output_dir = io_paths
 
     pid = os.getpid()
@@ -96,6 +96,7 @@ def convert_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None):
         args = (fname, cur_io_paths)
         kwargs = {
             'meta_dict': meta_dict,
+            'map_dict': map_dict,
         }
         try:
             convert(*args, **kwargs)
@@ -109,7 +110,7 @@ def convert_multi(corpus_name, fnames, io_paths, indent='', meta_dict=None):
     os.rmdir(tmpout_dir_proc)
 
 
-def convert_TwNC(fname, io_paths, meta_dict=None):
+def convert_TwNC(fname, io_paths, meta_dict=None, map_dict=None):
     _input_dir, tmpin_dir_proc, output_dir, tmpout_dir_proc = io_paths
     input_fname = copy_to_tmp(fname, tmpin_dir_proc)
     tmp_in_fname = input_fname.split('/')[-1]
@@ -123,7 +124,7 @@ def convert_TwNC(fname, io_paths, meta_dict=None):
 
     if output_fname is not None:
         try:
-            alpino_TwNC(input_fname, output_fname)
+            alpino_TwNC(input_fname, output_fname, map_dict)
         except Exception as e:
             logger.error('\ninput file: {}\noutput file: {}'.format(tmp_in_fname, output_fname.replace(output_dir, '...')))
             logger.error(e)
@@ -148,7 +149,7 @@ def convert_LeNC_nosplit(fname, tmpDIR_dir_proc, output_dir):
     os.remove(input_fname)
 
 
-def convert_LeNC(fname, io_paths, meta_dict=None):
+def convert_LeNC(fname, io_paths, meta_dict=None, map_dict=None):
     _input_dir, tmpin_dir_proc, output_dir, tmpout_dir_proc = io_paths
 
     input_fname = copy_to_tmp(fname, tmpin_dir_proc)
@@ -173,7 +174,7 @@ def convert_LeNC(fname, io_paths, meta_dict=None):
     os.remove(output_fname)
 
 
-def convert_SoNaR(fname, io_paths, meta_dict=None):
+def convert_SoNaR(fname, io_paths, meta_dict=None, map_dict=None):
     _input_dir, tmpin_dir_proc, output_dir, tmpout_dir_proc = io_paths
 
     input_fname = copy_to_tmp(fname, tmpin_dir_proc)
