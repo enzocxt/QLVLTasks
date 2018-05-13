@@ -17,7 +17,8 @@ main_TwNC()
 @timeit
 def main_TwNC():
     input_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-syn"
-    output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/output/test_mapping"
+    # output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/output/test_mapping"
+    output_dir = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-converted"
     # input_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/twnc_unknownerr_files"
     # output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/twnc_unknownerr_files"
     mapping_fname = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/" \

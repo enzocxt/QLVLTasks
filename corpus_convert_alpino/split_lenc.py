@@ -32,7 +32,7 @@ def split_by_tagname(text, tagname):
     split the xml text by tagname
     """
     tags = []
-    start = '<{}>'.format(tagname)
+    start = '<{}'.format(tagname)
     end = '</{}>'.format(tagname)
     ls, le = len(start), len(end)
     size = len(text)

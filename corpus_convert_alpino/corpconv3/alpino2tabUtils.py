@@ -465,9 +465,9 @@ def writeOutputMap(index, mapping):
                 root = '_'.join(split_lems)
 
             # map root
-            tok_from = '{}/{}'.format(root, pos)
-            if tok_from in mapping:
-                root = mapping[tok_from]
+            # tok_from = '{}/{}'.format(root, pos)
+            # if tok_from in mapping:
+            #     root = mapping[tok_from]
 
             if options.blanks:
                 root_str = '{:<20}'.format(root)
