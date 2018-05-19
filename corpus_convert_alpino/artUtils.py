@@ -11,6 +11,82 @@ class CorpusHandler(object):
             self,
             input_dir,
             output_dir,
+            support_dir,
+            method_multi=None
+    ):
+        """
+        :param input_dir: the input folder which includes all files you want to process
+        :param output_dir: the output folder
+        :param support_dir: the support folder which has other kind of corpus files
+
+                    when adding article boundaries,
+                    the input_dir should be the directory of converted files
+                    the support_dir should be the directory of wpr-art files
+
+        :param method_multi: the method which will be executed parallel
+        """
+        self.input_dir = input_dir
+        self.output_dir = output_dir
+        self.support_dir = support_dir
+        self.method_multi = method_multi
+
+    def run_multi(self):
+
+        self.deliver_and_run(self.input_dir)
+
+    def deliver_and_run(self, cur_input_dir, pg_leave=True):
+        """
+        recursively go to every folder and divide files for parallel methods
+        """
+        input_root = self.input_dir
+        level = cur_input_dir.replace(input_root, '').count(os.sep)
+        indent = ' ' * 2 * level
+        files = os.listdir(cur_input_dir)
+        dirs, files = file_filter(cur_input_dir, files)
+
+        # call multiprocessing function for files
+        if len(files) > 0:
+            self.call_multi(cur_input_dir, files)
+
+        # recursively call self for dirs
+        dirs = tqdm(sorted(dirs), unit='dir', desc='{}{}'.format(indent, cur_input_dir.split('/')[-1]), leave=pg_leave)
+        for d in dirs:
+            abs_dir = '{path}{sep}{dir}'.format(path=cur_input_dir, sep=os.sep, dir=d)
+            self.deliver_and_run(abs_dir, pg_leave=pg_leave)
+
+    def call_multi(self, input_dir, files):
+        input_root = self.input_dir
+        level = input_dir.replace(input_root, '').count(os.sep)
+        subindent = ' ' * 2 * level
+
+        num_cores = mp.cpu_count() - 1
+        num_files = len(files)
+        data_group = [[] for _ in range(num_cores)]
+        for i in range(num_files):
+            idx = i % num_cores
+            abs_fname = '{path}{sep}{fname}'.format(path=input_dir, sep=os.sep, fname=files[i])
+            data_group[idx].append(abs_fname)
+
+        # for experiment, only keep one first file in every group
+        # data_group = [g[:1] for g in data_group]
+
+        io_paths = (input_root, self.output_dir, self.support_dir)
+        pool = mp.Pool(processes=num_cores)
+        for i in range(num_cores):
+            args = (data_group[i], io_paths,)
+            kwds = {
+                'indent': subindent,
+            }
+            pool.apply_async(self.method_multi, args=args, kwds=kwds)
+        pool.close()
+        pool.join()
+
+
+class CorpusHandlerXML(object):
+    def __init__(
+            self,
+            input_dir,
+            output_dir,
             xml_dir,
             method_multi=None
     ):
@@ -116,6 +192,61 @@ def file_filter(path, files):
         elif ext == '.conll':
             res_files.append(fname)
     return res_dirs, res_files
+
+
+def get_out_fname_twnc(fname, input_dir, output_dir):
+    """
+    TwNC
+    generate output filename based on input filename
+    :param fname: "/.../input/Netherlands/1999/parool/filename"
+    :param input_dir: "/.../input/"
+    :param output_dir: "/.../output/"
+           out_fname:  "/.../output/Netherlands/1999/date/news/filename"
+    :return:
+    """
+    tail = fname.replace(input_dir, '')
+    tail = tail.strip(os.sep)
+    eles = tail.split(os.sep)
+    if len(eles) != 4:
+        return None
+    country, year, news, filename = eles
+    idx = 0
+    for i, c in enumerate(filename):
+        if c.isdigit():
+            idx = i
+            break
+    date = filename[idx:idx+8]
+    out_fname = os.sep.join([output_dir, country, year, date, news, filename])
+    return out_fname
+
+
+def get_art_fname_twnc(conll_fname, conll_root, art_root):
+    """
+    get art corpus file based on conll filename
+    """
+    news_dict = {
+        'algemeen_dagblad': 'ad',
+        'nrc_handelsblad': 'nrc',
+        'trouw': 'trouw',
+        'parool': 'parool',
+        'volkskrant': 'volkskrant',
+    }
+    path, fname = conll_fname.rsplit(os.sep, 1)
+    path = path.replace('Belgium/', '')
+    path = path.replace('Netherlands/', '')
+    idx = 0
+    for i, c in enumerate(fname):
+        if c.isdigit():
+            idx = i
+            break
+    news, tail = fname[:idx-1], fname[idx:]
+    if news not in news_dict:
+        raise ValueError("No such newspaper!")
+    fname = '{}{}'.format(news_dict[news], tail.replace('conll', 'wpr.art'))
+    art_path = path.replace(conll_root, art_root)
+    art_path = art_path.replace(news, news_dict[news])
+    art_fname = os.path.join(art_path, fname)
+    return art_fname
 
 
 def get_xml_fname(conll_fname, conll_root, xml_root):

@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
 
+"""
+This file adds article boundaries to converted conll files
+"""
+
 import os
 import sys
 import codecs
-import time
 import logging
-import functools
-import multiprocessing as mp
 from collections import OrderedDict
-from tqdm import tqdm
 
+from artUtils import *
+
+# logging settings
 logger = logging.getLogger('[TwNC:add boundary]')
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s %(name)-4s %(levelname)-4s %(message)s')
@@ -26,126 +29,7 @@ console_handler = logging.StreamHandler(sys.stdout)
 std_form = logging.Formatter('')
 
 
-root_path = os.path.dirname(__file__)
-
-
-news_dict = {
-    'algemeen_dagblad': 'ad',
-    'nrc_handelsblad': 'nrc',
-    'trouw': 'trouw',
-    'parool': 'parool',
-    'volkskrant': 'volkskrant',
-}
-
-
-def timeit(fn):
-    @functools.wraps(fn)
-    def timer(*args, **kwargs):
-        ts = time.time()
-        result = fn(*args, **kwargs)
-        te = time.time()
-        f = lambda arg : type(arg)
-        time_info = "\n************************************" + \
-                    "\nfunction    = {0}".format(fn.__name__) + \
-                    "\n  arguments = {0} {1}".format([f(arg) for arg in args], kwargs) + \
-                    "\n  time      = %.6f sec" % (te-ts) + \
-                    "\n************************************\n"
-        logger.info(time_info)
-        return result
-    return timer
-
-
-def list_dir_tree(rootpath):
-    for root, dirs, files in sorted(os.walk(rootpath)):
-        level = root.replace(rootpath, '').count(os.sep)
-        indent = ' ' * 4 * (level)
-        # subindent = ' ' * 2 * (level + 1)
-        num_files = len(files)
-        file_info = "{} files".format(num_files)
-        dir_info = "{}{}/ ({})".format(indent, os.path.basename(root), file_info)
-        # print(dir_info)
-        logger.info(dir_info)
-        # print "{}{}/".format(indent, os.path.basename(root))
-    logger.info('')
-
-
-def file_filter(path, files):
-    res_dirs, res_files = [], []
-    for fname in files:
-        prefix, ext = os.path.splitext(fname)
-        if os.path.isdir('{}/{}'.format(path, fname)):
-            res_dirs.append(fname)
-        elif ext == '.conll':
-            res_files.append(fname)
-    return res_dirs, res_files
-
-
-class CorpusHandler(object):
-    def __init__(
-            self,
-            input_dir,
-            output_dir,
-            art_dir,
-    ):
-        """
-        :param input_dir: the input folder which includes all files you want to process
-        :param output_dir: the output folder
-        """
-        self.input_dir = input_dir
-        self.output_dir = output_dir
-        self.art_dir = art_dir
-
-    def run_multi(self):
-
-        self.deliver_and_run(self.input_dir)
-
-    def deliver_and_run(self, cur_input_dir, pg_leave=True):
-        """
-        recursively go to every folder and divide files for parallel methods
-        """
-        input_root = self.input_dir
-        level = cur_input_dir.replace(input_root, '').count(os.sep)
-        indent = ' ' * 2 * level
-        files = os.listdir(cur_input_dir)
-        dirs, files = file_filter(cur_input_dir, files)
-
-        # call multiprocessing function for files
-        if len(files) > 0:
-            self.call_multi(cur_input_dir, files)
-
-        # recursively call self for dirs
-        dirs = tqdm(sorted(dirs), unit='dir', desc='{}{}'.format(indent, cur_input_dir.split('/')[-1]), leave=pg_leave)
-        for d in dirs:
-            abs_dir = '{path}{sep}{dir}'.format(path=cur_input_dir, sep=os.sep, dir=d)
-            self.deliver_and_run(abs_dir, pg_leave=pg_leave)
-
-    def call_multi(self, input_dir, files):
-        input_root = self.input_dir
-        level = input_dir.replace(input_root, '').count(os.sep)
-        indent = ' ' * 2 * level
-        subindent = ' ' * 2 * level
-
-        num_cores = mp.cpu_count() - 1
-        num_files = len(files)
-        data_group = [[] for _ in range(num_cores)]
-        for i in range(num_files):
-            idx = i % num_cores
-            abs_fname = '{path}{sep}{fname}'.format(path=input_dir, sep=os.sep, fname=files[i])
-            data_group[idx].append(abs_fname)
-
-        # for experiment, only keep one first file in every group
-        # data_group = [g[:1] for g in data_group]
-
-        io_paths = (input_root, self.output_dir, self.art_dir)
-        pool = mp.Pool(processes=num_cores)
-        for i in range(num_cores):
-            args = (data_group[i], io_paths,)
-            kwds = {
-                'indent': subindent,
-            }
-            pool.apply_async(add_bound_multi, args=args, kwds=kwds)
-        pool.close()
-        pool.join()
+# root_path = os.path.dirname(__file__)
 
 
 def add_bound_multi(fnames, io_paths, indent=''):
@@ -154,50 +38,13 @@ def add_bound_multi(fnames, io_paths, indent=''):
     pid = os.getpid()
     fnames = tqdm(fnames, unit='file', desc='{}proc({})'.format(indent, pid))
     for fname in fnames:
-        out_fname = fname.replace(input_dir, output_dir)
-        art_fname = get_art_fname(fname, input_dir, art_dir)
+        # out_fname = fname.replace(input_dir, output_dir)
+        out_fname = get_out_fname_twnc(fname, input_dir, output_dir)
+        if out_fname is None:
+            logger.error('\n[input filename incorrect form] file: \n{}'.format(fname))
+        os.makedirs(os.path.dirname(out_fname), exist_ok=True)
+        art_fname = get_art_fname_twnc(fname, input_dir, art_dir)
         add_bound(fname, art_fname, out_fname)
-
-
-def get_art_fname(conll_fname, conll_root, art_root):
-    path, fname = conll_fname.rsplit(os.sep, 1)
-    idx = 0
-    for i, c in enumerate(fname):
-        if c.isdigit():
-            idx = i
-            break
-    news, date = fname[:idx-1], fname[idx:]
-    if news not in news_dict:
-        raise ValueError("No such newspaper!")
-    fname = '{}{}'.format(news_dict[news], date.replace('conll', 'wpr.art'))
-    art_path = path.replace(conll_root, art_root)
-    art_path = art_path.replace(news, news_dict[news])
-    art_fname = os.path.join(art_path, fname)
-    return art_fname
-
-
-def split_by_tagname(text, tagname):
-    """
-    split the xml text by tagname
-    """
-    tags = []
-    start = '<{}'.format(tagname)
-    end = '</{}>'.format(tagname)
-    ls, le = len(start), len(end)
-    size = len(text)
-    i = 0
-    while True:
-        idx_start = text.find(start, i)
-        idx_end = text.find(end, idx_start)
-        if idx_start < 0 or idx_end < 0:
-            # tag not found
-            break
-        tags.append(text[idx_start:(idx_end + le)])
-        i = idx_end + le
-        if i >= size:
-            break
-
-    return tags
 
 
 def get_sign(sentence, idx):
@@ -270,30 +117,42 @@ def add_bound(conll_fname, art_fname, out_fname):
     for naam, sents in arts_dict.items():
         num_alpinos += len(sents)
 
+    # artikels = []
+    # print(num_sents, num_alpinos)
     # if num_sents == num_alpinos, we can be sure that sentences are in same order
     # and no sentence is missing between two files
-    artikels = []
-    print(num_sents, num_alpinos)
     if num_sents == num_alpinos:
         flag = compare_signs(conll_sents, arts_dict)
         if flag:
             artikels = add_bound_text(conll_sents, arts_dict)
-            text = '\n'.join(artikels)
-            os.makedirs(os.path.dirname(out_fname), exist_ok=True)
-            with codecs.open(out_fname, 'w', 'latin-1') as outf:
-                outf.write(text)
-        else:
+            for idx, art in enumerate(artikels):
+                dir, fname = out_fname.rsplit(os.sep, 1)
+                name, ext = fname.split('.', 1)
+                filename = "{}/{}_{}.{}".format(dir, name, idx, ext)
+                with codecs.open(filename, 'w', 'latin-1') as outf:
+                    outf.write(art)
+            # text = '\n'.join(artikels)
+            # os.makedirs(os.path.dirname(out_fname), exist_ok=True)
+            # with codecs.open(out_fname, 'w', 'latin-1') as outf:
+            #     outf.write(text)
+        else :
             logger.error('\n[Sentence signature inconsistent] file: \n{}'.format(conll_fname))
     elif num_sents - num_alpinos == 1:
         conll_sents = conll_sents[1:]
         flag = compare_signs(conll_sents, arts_dict)
         if flag:
             artikels = add_bound_text(conll_sents, arts_dict)
-            text = '\n'.join(artikels)
-            os.makedirs(os.path.dirname(out_fname), exist_ok=True)
-            with codecs.open(out_fname, 'w', 'latin-1') as outf:
-                outf.write(text)
-            logger.error('\n[Sentence num diff=1] file: \n{}'.format(conll_fname))
+            for idx, art in enumerate(artikels):
+                dir, fname = out_fname.rsplit(os.sep, 1)
+                name, ext = fname.split('.', 1)
+                filename = "{}/{}_{}.{}".format(dir, name, idx, ext)
+                with codecs.open(filename, 'w', 'latin-1') as outf:
+                    outf.write(art)
+            # text = '\n'.join(artikels)
+            # os.makedirs(os.path.dirname(out_fname), exist_ok=True)
+            # with codecs.open(out_fname, 'w', 'latin-1') as outf:
+            #     outf.write(text)
+            # logger.error('\n[Sentence num diff=1] file: \n{}'.format(conll_fname))
         else:
             logger.error('\n[Sentence num diff=1, signature inconsistent] file: \n{}'.format(conll_fname))
     else:
@@ -321,7 +180,7 @@ def test_add_bound():
 
 
 def main():
-    conll_root = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-converted/Netherlands"
+    conll_root = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-converted/"
     art_root = "/home/enzocxt/Projects/QLVL/corp/nl/TwNC-wpr-art"
     output_dir = "/home/enzocxt/Projects/QLVL/other_tasks/corpus_convert_alpino/output/TwNC-bound"
 
@@ -332,11 +191,10 @@ def main():
             raise AttributeError("File or directory not exists: \n{}".format(p))
 
     list_dir_tree(conll_root)
-    corppar = CorpusHandler(conll_root, output_dir, art_root)
+    corppar = CorpusHandler(conll_root, output_dir, art_root, method_multi=add_bound_multi)
     corppar.run_multi()
 
 
 if __name__ == '__main__':
-    # test()
-    # main()
-    test_add_bound()
+    main()
+    # test_add_bound()
